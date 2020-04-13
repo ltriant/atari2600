@@ -30,7 +30,7 @@ pub struct TIA {
     pf0: u8,
     pf1: u8,
     pf2: u8,
-    pf: [bool; 80],
+    pf: [bool; 20],
     pf_horizontal_mirror: bool,
 }
 
@@ -53,7 +53,7 @@ impl TIA {
             colupf: 0,
             colubk: 0,
 
-            pf: [false; 80],
+            pf: [false; 20],
             pf0: 0,
             pf1: 0,
             pf2: 0,
@@ -81,29 +81,17 @@ impl TIA {
 
         // PF0 is the first 4 bits, in big-endian order
         for x in 0 .. 4 {
-            let v = (self.pf0 >> (x + 4)) & 0x01 != 0;
-            self.pf[x * 4] = v;
-            self.pf[x * 4 + 1] = v;
-            self.pf[x * 4 + 2] = v;
-            self.pf[x * 4 + 3] = v;
+            self.pf[x] = (self.pf0 >> (x + 4)) & 0x01 != 0;
         }
 
         // PF1 is the next 8 bits, in little-endian order
         for x in 0 .. 8 {
-            let v = (self.pf1 >> (7 - x)) & 0x01 != 0;
-            self.pf[x * 4 + 16] = v;
-            self.pf[x * 4 + 16 + 1] = v;
-            self.pf[x * 4 + 16 + 2] = v;
-            self.pf[x * 4 + 16 + 3] = v;
+            self.pf[x + 4] = (self.pf1 >> (7 - x)) & 0x01 != 0;
         }
 
         // PF2 is the last 8 bits, in big-endian order
         for x in 0 .. 8 {
-            let v = (self.pf2 >> x) & 0x01 != 0;
-            self.pf[x * 4 + 48] = v;
-            self.pf[x * 4 + 48 + 1] = v;
-            self.pf[x * 4 + 48 + 2] = v;
-            self.pf[x * 4 + 48 + 3] = v;
+            self.pf[x + 12] = (self.pf2 >> x) & 0x01 != 0;
         }
     }
 
@@ -140,7 +128,10 @@ impl TIA {
 
             let color = if x < 80 {
                 // The playfield makes up the left-most side of the screen.
-                if self.pf[x as usize] {
+
+                let pf_x = x / 4;
+
+                if self.pf[pf_x as usize] {
                     self.colupf
                 } else {
                     self.colubk
@@ -150,10 +141,12 @@ impl TIA {
                 // screen, optionally mirrored horizontally as denoted by the
                 // CTRLPF register.
 
+                let pf_x = (x - 80) / 4;
+
                 let idx = if self.pf_horizontal_mirror {
-                    159 - x as usize
+                    self.pf.len() - 1 - pf_x as usize
                 } else {
-                    79 - (159 - x as usize)
+                    pf_x as usize
                 };
 
                 if self.pf[idx] {
@@ -294,7 +287,7 @@ impl Bus for TIA {
 
             // TODO the rest of the registers...
 
-            _ => { }, // unimplemented!("register: 0x{:04X}", address),
+            _ => { }, // unimplemented!("register: 0x{:04X} 0x{:02X}", address, val),
         }
     }
 }

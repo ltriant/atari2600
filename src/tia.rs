@@ -32,6 +32,27 @@ pub struct TIA {
     pf2: u8,
     pf: [bool; 20],
     pf_horizontal_mirror: bool,
+    pf_score_mode: bool,
+    pf_priority: bool,
+
+    // Player sprites
+    grp0: u8,
+    grp1: u8,
+    refp0: bool,
+    refp1: bool,
+    p0_x: usize,
+    p1_x: usize,
+
+    // Missile sprites
+    m0_x: usize,
+    m1_x: usize,
+    enam0: bool,
+    enam1: bool,
+
+    // Ball sprite
+    bl_x: usize,
+    enabl: bool,
+    bl_size: usize,
 }
 
 pub struct StepResult {
@@ -58,10 +79,30 @@ impl TIA {
             pf1: 0,
             pf2: 0,
             pf_horizontal_mirror: false,
+            pf_score_mode: false,
+            pf_priority: false,
+
+            grp0: 0,
+            grp1: 0,
+            refp0: false,
+            refp1: false,
+            p0_x: 0,
+            p1_x: 0,
+
+            m0_x: 0,
+            m1_x: 0,
+            enam0: false,
+            enam1: false,
+
+            bl_x: 0,
+            enabl: false,
+            bl_size: 0,
         }
     }
 
     pub fn cpu_halt(&self) -> bool { self.wsync }
+
+    fn in_hblank(&self) -> bool { self.dot < 68 }
 
     fn tick(&mut self) {
         self.dot += 1;
@@ -92,6 +133,145 @@ impl TIA {
         // PF2 is the last 8 bits, in big-endian order
         for x in 0 .. 8 {
             self.pf[x + 12] = (self.pf2 >> x) & 0x01 != 0;
+        }
+    }
+
+    fn get_bl_color(&self, x: usize) -> Option<u8> {
+        if x >= self.bl_x && x < self.bl_x + self.bl_size && self.enabl {
+            Some(self.colupf)
+        } else {
+            None
+        }
+    }
+
+    fn get_m0_color(&self, x: usize) -> Option<u8> {
+        if x == self.m0_x && self.enam0 {
+            Some(self.colup0)
+        } else {
+            None
+        }
+    }
+
+    fn get_m1_color(&self, x: usize) -> Option<u8> {
+        if x == self.m1_x && self.enam1 {
+            Some(self.colup1)
+        } else {
+            None
+        }
+    }
+
+    fn get_p0_color(&self, x: usize) -> Option<u8> {
+        if x >= self.p0_x && x < self.p0_x + 8 {
+            let x = x - self.p0_x;
+
+            if self.refp0 {
+                if (self.grp0 & (1 << x)) != 0 {
+                    return Some(self.colup0);
+                }
+            } else {
+                if (self.grp0 & (1 << (7 - x))) != 0 {
+                    return Some(self.colup0);
+                }
+            }
+        }
+
+        return None;
+    }
+
+    fn get_p1_color(&self, x: usize) -> Option<u8> {
+        if x >= self.p1_x && x < self.p1_x + 8 {
+            let x = x - self.p1_x;
+
+            if self.refp1 {
+                if (self.grp1 & (1 << x)) != 0 {
+                    return Some(self.colup1);
+                }
+            } else {
+                if (self.grp1 & (1 << (7 - x))) != 0 {
+                    return Some(self.colup1);
+                }
+            }
+        }
+
+        return None;
+    }
+
+    fn get_pf_color(&self, x: usize) -> Option<u8> {
+        if x < 80 {
+            // The playfield makes up the left-most side of the screen.
+
+            let pf_x = x / 4;
+
+            if self.pf[pf_x as usize] {
+                return if self.pf_score_mode {
+                    Some(self.colup0)
+                } else {
+                    Some(self.colupf)
+                };
+            }
+        } else {
+            // The playfield also makes up the right-most side of the
+            // screen, optionally mirrored horizontally as denoted by the
+            // CTRLPF register.
+
+            let pf_x = (x - 80) / 4;
+
+            let idx = if self.pf_horizontal_mirror {
+                self.pf.len() - 1 - pf_x as usize
+            } else {
+                pf_x as usize
+            };
+
+            if self.pf[idx] {
+                return if self.pf_score_mode {
+                    Some(self.colup1)
+                } else {
+                    Some(self.colupf)
+                };
+            }
+        }
+
+        return None;
+    }
+
+    // Resolve playfield/player/missile/ball priorities and return the color to
+    // be rendered at the `x' position.
+    fn get_pixel_color(&self, x: usize) -> u8 {
+        if !self.pf_priority {
+            // When pixels of two or more objects overlap each other, only the
+            // pixel of the object with topmost priority is drawn to the screen.
+            // The normal priority ordering is:
+            //
+            //  Priority     Color    Objects
+            //  1 (highest)  COLUP0   P0, M0  (and left side of PF in SCORE-mode)
+            //  2            COLUP1   P1, M1  (and right side of PF in SCORE-mode)
+            //  3            COLUPF   BL, PF  (only BL in SCORE-mode)
+            //  4 (lowest)   COLUBK   BK
+
+            self.get_p0_color(x)
+                .or(self.get_m0_color(x))
+                .or(self.get_p1_color(x))
+                .or(self.get_m1_color(x))
+                .or(self.get_pf_color(x))
+                .or(self.get_bl_color(x))
+                .unwrap_or(self.colubk)
+        } else {
+            // Optionally, the playfield and ball may be assigned to have higher
+            // priority (by setting CTRLPF.2). The priority ordering is then:
+            //
+            //  Priority     Color    Objects
+            //  1 (highest)  COLUPF   PF, BL  (always, the SCORE-bit is ignored)
+            //  2            COLUP0   P0, M0
+            //  3            COLUP1   P1, M1
+            //  4 (lowest)   COLUBK   BK
+
+            self.get_pf_color(x)
+                .or(self.get_bl_color(x))
+                .or(self.get_p0_color(x))
+                .or(self.get_m0_color(x))
+                .or(self.get_p1_color(x))
+                .or(self.get_m1_color(x))
+                .unwrap_or(self.colubk)
         }
     }
 
@@ -126,36 +306,7 @@ impl TIA {
                 3
             );
 
-            let color = if x < 80 {
-                // The playfield makes up the left-most side of the screen.
-
-                let pf_x = x / 4;
-
-                if self.pf[pf_x as usize] {
-                    self.colupf
-                } else {
-                    self.colubk
-                }
-            } else {
-                // The playfield also makes up the right-most side of the
-                // screen, optionally mirrored horizontally as denoted by the
-                // CTRLPF register.
-
-                let pf_x = (x - 80) / 4;
-
-                let idx = if self.pf_horizontal_mirror {
-                    self.pf.len() - 1 - pf_x as usize
-                } else {
-                    pf_x as usize
-                };
-
-                if self.pf[idx] {
-                    self.colupf
-                } else {
-                    self.colubk
-                }
-            };
-
+            let color = self.get_pixel_color(x as usize) as usize;
             canvas.set_draw_color(NTSC_PALETTE[color as usize]);
             canvas.fill_rect(rect).unwrap();
         }
@@ -229,16 +380,6 @@ impl Bus for TIA {
             0x0003 => { },
 
             //
-            // Missile sizes
-            //
-
-            // NUSIZ0  ..111111  number-size player-missile 0
-            0x0004 => { },
-
-            // NUSIZ1  ..111111  number-size player-missile 1
-            0x0005 => { },
-
-            //
             // Colors
             //
 
@@ -257,6 +398,16 @@ impl Bus for TIA {
             // CTRLPF  ..11.111  control playfield ball size & collisions
             0x000a => {
                 self.pf_horizontal_mirror = (val & 0x01) != 0;
+                self.pf_priority          = (val & 0x04) != 0;
+                self.pf_score_mode        = (val & 0x02) != 0 && !self.pf_priority;
+                self.bl_size              = match (val & 0b0011_0000) >> 4 {
+                    0 => 1,
+                    1 => 2,
+                    2 => 4,
+                    3 => 8,
+                    _ => unreachable!(),
+                };
+
                 // TODO the other bits
             },
 
@@ -285,7 +436,103 @@ impl Bus for TIA {
                 self.update_playfield();
             },
 
-            // TODO the rest of the registers...
+            //
+            // Sprites
+            //
+
+            // NUSIZ0  ..111111  number-size player-missile 0
+            0x0004 => { },
+
+            // NUSIZ1  ..111111  number-size player-missile 1
+            0x0005 => { },
+
+            // REFP0   ....1...  reflect player 0
+            0x000b => { self.refp0 = (val & 0b0000_1000) != 0 },
+
+            // REFP1   ....1...  reflect player 1
+            0x000c => { self.refp1 = (val & 0b0000_1000) != 0 },
+
+            // RESP0   <strobe>  reset player 0
+            0x0010 => {
+                // If the write takes place anywhere within horizontal blanking
+                // then the position is set to the left edge of the screen (plus
+                // a few pixels towards right: 3 pixels for P0/P1, and only 2
+                // pixels for M0/M1/BL).
+                self.p0_x = if self.in_hblank() {
+                    3
+                } else {
+                    self.dot as usize - 68
+                };
+            },
+
+            // RESP1   <strobe>  reset player 1
+            0x0011 => {
+                self.p1_x = if self.in_hblank() {
+                    3
+                } else {
+                    self.dot as usize - 68
+                };
+            },
+
+            // RESM0   <strobe>  reset missile 0
+            0x0012 => {
+                self.m0_x = if self.in_hblank() {
+                    2
+                } else {
+                    self.dot as usize - 68
+                };
+            },
+
+            // RESM1   <strobe>  reset missile 1
+            0x0013 => {
+                self.m1_x = if self.in_hblank() {
+                    2
+                } else {
+                    self.dot as usize - 68
+                };
+            },
+
+            // RESBL   <strobe>  reset ball
+            0x0014 => {
+                self.bl_x = if self.in_hblank() {
+                    2
+                } else {
+                    self.dot as usize - 68
+                };
+            },
+
+            // GRP0    11111111  graphics player 0
+            0x001b => {
+                debug!("grp0: {:08b}", val);
+                self.grp0 = val;
+            },
+
+            // GRP1    11111111  graphics player 1
+            0x001c => {
+                debug!("grp1: {:08b}", val);
+                self.grp1 = val;
+            },
+
+            // ENAM0   ......1.  graphics (enable) missile 0
+            0x001d => {
+                self.enam0 = (val & 0x02) != 0;
+            },
+
+            // ENAM1   ......1.  graphics (enable) missile 1
+            0x001e => {
+                self.enam1 = (val & 0x02) != 0;
+            },
+
+            // ENABL   ......1.  graphics (enable) ball
+            0x001f => {
+                self.enabl = (val & 0x02) != 0;
+            },
+
+            //
+            // Audio
+            //
+
+            0x0015 ..= 0x001a => { },
 
             _ => { }, // unimplemented!("register: 0x{:04X} 0x{:02X}", address, val),
         }

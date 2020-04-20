@@ -61,15 +61,9 @@ fn main() {
     }
 
     let mut event_pump = sdl_context.event_pump().unwrap();
+    let mut poll_keyboard = false;
 
     'running: loop {
-        for event in event_pump.poll_iter() {
-            match event {
-                Event::Quit { .. } => { break 'running },
-                _ => { },
-            }
-        }
-
         let cpu_cycles = if tia.borrow().cpu_halt() {
             1
         } else {
@@ -83,9 +77,20 @@ fn main() {
 
             if rv.end_of_frame {
                 canvas.present();
-                //std::thread::sleep(std::time::Duration::from_millis(2));
+                poll_keyboard = true;
+                std::thread::sleep(std::time::Duration::from_millis(2));
             }
         }
 
+        if poll_keyboard {
+            for event in event_pump.poll_iter() {
+                match event {
+                    Event::Quit { .. } => { break 'running },
+                    _ => { },
+                }
+            }
+
+            poll_keyboard = false;
+        }
     }
 }

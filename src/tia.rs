@@ -1,7 +1,14 @@
+mod color;
 mod palette;
+mod playfield;
+
+use std::rc::Rc;
+use std::cell::RefCell;
 
 use crate::bus::Bus;
+use crate::tia::color::Colors;
 use crate::tia::palette::NTSC_PALETTE;
+use crate::tia::playfield::Playfield;
 
 use sdl2::rect::Rect;
 use sdl2::render::Canvas;
@@ -18,22 +25,8 @@ pub struct TIA {
     // Horizontal sync
     wsync: bool,
 
-    // Colors
-    colup0: u8,
-    colup1: u8,
-    colupf: u8,
-    colubk: u8,
-
-    // 20-bit playfield
-    // .... | .... .... | .... ....
-    // PF0  |    PF1    |    PF2
-    pf0: u8,
-    pf1: u8,
-    pf2: u8,
-    pf: [bool; 20],
-    pf_horizontal_mirror: bool,
-    pf_score_mode: bool,
-    pf_priority: bool,
+    colors: Rc<RefCell<Colors>>,
+    pf: Playfield,
 
     // Player sprites
     grp0: u8,
@@ -53,14 +46,59 @@ pub struct TIA {
     bl_x: usize,
     enabl: bool,
     bl_size: usize,
+
+    // Horizontal movement
+    hmp0: usize,
+    hmp1: usize,
+    hmm0: usize,
+    hmm1: usize,
+    hmbl: usize,
 }
 
 pub struct StepResult {
     pub end_of_frame: bool,
 }
 
+fn hmove_value(v: u8) -> u8 {
+    // Signed Motion Value (-8..-1=Right, 0=No motion, +1..+7=Left)
+
+    /*
+    match v & 0x0f {
+        0b0000 => 0,
+        0b0001 => 1,
+        0b0010 => 2,
+        0b0011 => 3,
+        0b0100 => 4,
+        0b0101 => 5,
+        0b0110 => 6,
+        0b0111 => 7,
+
+        0b1000 => -1,
+        0b1001 => -2,
+        0b1010 => -3,
+        0b1011 => -4,
+        0b1100 => -5,
+        0b1101 => -6,
+        0b1110 => -7,
+        0b1111 => -8,
+        _ => unreachable!(),
+    }
+    */
+
+    if v == 0 {
+        0
+    } else if v < 8 {
+        v + 8
+    } else {
+        v - 8
+    }
+}
+
 impl TIA {
     pub fn new_tia() -> Self {
+        let colors = Rc::new(RefCell::new(Colors::new_colors()));
+        let pf = Playfield::new_playfield(colors.clone());
+
         Self {
             dot: 0,
             scanline: 0,
@@ -69,18 +107,8 @@ impl TIA {
             vblank: false,
             wsync: false,
 
-            colup0: 0,
-            colup1: 0,
-            colupf: 0,
-            colubk: 0,
-
-            pf: [false; 20],
-            pf0: 0,
-            pf1: 0,
-            pf2: 0,
-            pf_horizontal_mirror: false,
-            pf_score_mode: false,
-            pf_priority: false,
+            colors: colors,
+            pf: pf,
 
             grp0: 0,
             grp1: 0,
@@ -97,6 +125,12 @@ impl TIA {
             bl_x: 0,
             enabl: false,
             bl_size: 0,
+
+            hmp0: 0,
+            hmp1: 0,
+            hmm0: 0,
+            hmm1: 0,
+            hmbl: 0,
         }
     }
 
@@ -116,29 +150,9 @@ impl TIA {
         }
     }
 
-    fn update_playfield(&mut self) {
-        // The playfield is a 20-bit set of dots, where each dot makes up four
-        // pixels on the screen.
-
-        // PF0 is the first 4 bits, in big-endian order
-        for x in 0 .. 4 {
-            self.pf[x] = (self.pf0 >> (x + 4)) & 0x01 != 0;
-        }
-
-        // PF1 is the next 8 bits, in little-endian order
-        for x in 0 .. 8 {
-            self.pf[x + 4] = (self.pf1 >> (7 - x)) & 0x01 != 0;
-        }
-
-        // PF2 is the last 8 bits, in big-endian order
-        for x in 0 .. 8 {
-            self.pf[x + 12] = (self.pf2 >> x) & 0x01 != 0;
-        }
-    }
-
     fn get_bl_color(&self, x: usize) -> Option<u8> {
         if x >= self.bl_x && x < self.bl_x + self.bl_size && self.enabl {
-            Some(self.colupf)
+            Some(self.colors.borrow().colupf())
         } else {
             None
         }
@@ -146,7 +160,7 @@ impl TIA {
 
     fn get_m0_color(&self, x: usize) -> Option<u8> {
         if x == self.m0_x && self.enam0 {
-            Some(self.colup0)
+            Some(self.colors.borrow().colup0())
         } else {
             None
         }
@@ -154,7 +168,7 @@ impl TIA {
 
     fn get_m1_color(&self, x: usize) -> Option<u8> {
         if x == self.m1_x && self.enam1 {
-            Some(self.colup1)
+            Some(self.colors.borrow().colup1())
         } else {
             None
         }
@@ -166,11 +180,11 @@ impl TIA {
 
             if self.refp0 {
                 if (self.grp0 & (1 << x)) != 0 {
-                    return Some(self.colup0);
+                    return Some(self.colors.borrow().colup0());
                 }
             } else {
                 if (self.grp0 & (1 << (7 - x))) != 0 {
-                    return Some(self.colup0);
+                    return Some(self.colors.borrow().colup0());
                 }
             }
         }
@@ -184,50 +198,12 @@ impl TIA {
 
             if self.refp1 {
                 if (self.grp1 & (1 << x)) != 0 {
-                    return Some(self.colup1);
+                    return Some(self.colors.borrow().colup1());
                 }
             } else {
                 if (self.grp1 & (1 << (7 - x))) != 0 {
-                    return Some(self.colup1);
+                    return Some(self.colors.borrow().colup1());
                 }
-            }
-        }
-
-        return None;
-    }
-
-    fn get_pf_color(&self, x: usize) -> Option<u8> {
-        if x < 80 {
-            // The playfield makes up the left-most side of the screen.
-
-            let pf_x = x / 4;
-
-            if self.pf[pf_x as usize] {
-                return if self.pf_score_mode {
-                    Some(self.colup0)
-                } else {
-                    Some(self.colupf)
-                };
-            }
-        } else {
-            // The playfield also makes up the right-most side of the
-            // screen, optionally mirrored horizontally as denoted by the
-            // CTRLPF register.
-
-            let pf_x = (x - 80) / 4;
-
-            let idx = if self.pf_horizontal_mirror {
-                self.pf.len() - 1 - pf_x as usize
-            } else {
-                pf_x as usize
-            };
-
-            if self.pf[idx] {
-                return if self.pf_score_mode {
-                    Some(self.colup1)
-                } else {
-                    Some(self.colupf)
-                };
             }
         }
 
@@ -237,7 +213,7 @@ impl TIA {
     // Resolve playfield/player/missile/ball priorities and return the color to
     // be rendered at the `x' position.
     fn get_pixel_color(&self, x: usize) -> u8 {
-        if !self.pf_priority {
+        if !self.pf.priority() {
             // When pixels of two or more objects overlap each other, only the
             // pixel of the object with topmost priority is drawn to the screen.
             // The normal priority ordering is:
@@ -252,9 +228,9 @@ impl TIA {
                 .or(self.get_m0_color(x))
                 .or(self.get_p1_color(x))
                 .or(self.get_m1_color(x))
-                .or(self.get_pf_color(x))
+                .or(self.pf.get_color(x))
                 .or(self.get_bl_color(x))
-                .unwrap_or(self.colubk)
+                .unwrap_or(self.colors.borrow().colubk())
         } else {
             // Optionally, the playfield and ball may be assigned to have higher
             // priority (by setting CTRLPF.2). The priority ordering is then:
@@ -265,13 +241,13 @@ impl TIA {
             //  3            COLUP1   P1, M1
             //  4 (lowest)   COLUBK   BK
 
-            self.get_pf_color(x)
+            self.pf.get_color(x)
                 .or(self.get_bl_color(x))
                 .or(self.get_p0_color(x))
                 .or(self.get_m0_color(x))
                 .or(self.get_p1_color(x))
                 .or(self.get_m1_color(x))
-                .unwrap_or(self.colubk)
+                .unwrap_or(self.colors.borrow().colubk())
         }
     }
 
@@ -348,7 +324,10 @@ impl Bus for TIA {
     // https://problemkaputt.de/2k6specs.htm#memoryandiomap
 
     fn read(&mut self, address: u16) -> u8 {
-        0
+        match address {
+            0x0282 => { 0b0000_1000 },
+            _ => 0,
+        }
     }
 
     fn write(&mut self, address: u16, val: u8) {
@@ -384,22 +363,20 @@ impl Bus for TIA {
             //
 
             // COLUP0  1111111.  color-lum player 0 and missile 0
-            0x0006 => { self.colup0 = val & 0xfe },
+            0x0006 => { self.colors.borrow_mut().set_colup0(val & 0xfe) },
 
             // COLUP1  1111111.  color-lum player 1 and missile 1
-            0x0007 => { self.colup1 = val & 0xfe },
+            0x0007 => { self.colors.borrow_mut().set_colup1(val & 0xfe) },
 
             // COLUPF  1111111.  color-lum playfield and ball
-            0x0008 => { self.colupf = val & 0xfe },
+            0x0008 => { self.colors.borrow_mut().set_colupf(val & 0xfe) },
 
             // COLUBK  1111111.  color-lum background
-            0x0009 => { self.colubk = val & 0xfe },
+            0x0009 => { self.colors.borrow_mut().set_colubk(val & 0xfe) },
 
             // CTRLPF  ..11.111  control playfield ball size & collisions
             0x000a => {
-                self.pf_horizontal_mirror = (val & 0x01) != 0;
-                self.pf_priority          = (val & 0x04) != 0;
-                self.pf_score_mode        = (val & 0x02) != 0 && !self.pf_priority;
+                self.pf.set_control(val);
                 self.bl_size              = match (val & 0b0011_0000) >> 4 {
                     0 => 1,
                     1 => 2,
@@ -416,32 +393,28 @@ impl Bus for TIA {
             //
 
             // PF0     1111....  playfield register byte 0
-            0x000d => {
-                debug!("pf0: {:08b}", val);
-                self.pf0 = val;
-                self.update_playfield();
-            },
+            0x000d => { self.pf.set_pf0(val) },
 
             // PF1     11111111  playfield register byte 1
-            0x000e => {
-                debug!("pf1: {:08b}", val);
-                self.pf1 = val;
-                self.update_playfield();
-            },
+            0x000e => { self.pf.set_pf1(val) },
 
             // PF2     11111111  playfield register byte 2
-            0x000f => {
-                debug!("pf2: {:08b}", val);
-                self.pf2 = val;
-                self.update_playfield();
-            },
+            0x000f => { self.pf.set_pf2(val) },
 
             //
             // Sprites
             //
 
             // NUSIZ0  ..111111  number-size player-missile 0
-            0x0004 => { },
+            0x0004 => {
+                let size = match (val & 0b0011_0000) >> 4 {
+                    0 => 1,
+                    1 => 2,
+                    2 => 4,
+                    3 => 8,
+                    _ => unreachable!(),
+                };
+            },
 
             // NUSIZ1  ..111111  number-size player-missile 1
             0x0005 => { },
@@ -502,30 +475,55 @@ impl Bus for TIA {
             },
 
             // GRP0    11111111  graphics player 0
-            0x001b => {
-                debug!("grp0: {:08b}", val);
-                self.grp0 = val;
-            },
+            0x001b => { self.grp0 = val },
 
             // GRP1    11111111  graphics player 1
-            0x001c => {
-                debug!("grp1: {:08b}", val);
-                self.grp1 = val;
-            },
+            0x001c => { self.grp1 = val },
 
             // ENAM0   ......1.  graphics (enable) missile 0
-            0x001d => {
-                self.enam0 = (val & 0x02) != 0;
-            },
+            0x001d => { self.enam0 = (val & 0x02) != 0 },
 
             // ENAM1   ......1.  graphics (enable) missile 1
-            0x001e => {
-                self.enam1 = (val & 0x02) != 0;
-            },
+            0x001e => { self.enam1 = (val & 0x02) != 0 },
 
             // ENABL   ......1.  graphics (enable) ball
-            0x001f => {
-                self.enabl = (val & 0x02) != 0;
+            0x001f => { self.enabl = (val & 0x02) != 0 },
+
+            //
+            // Horizontal motion
+            //
+
+            // HMP0    1111....  horizontal motion player 0
+            0x0020 => { self.hmp0 = hmove_value(val >> 4) as usize },
+
+            // HMP1    1111....  horizontal motion player 1
+            0x0021 => { self.hmp1 = hmove_value(val >> 4) as usize },
+
+            // HMM0    1111....  horizontal motion missile 0
+            0x0022 => { self.hmm0 = hmove_value(val >> 4) as usize },
+
+            // HMM1    1111....  horizontal motion missile 1
+            0x0023 => { self.hmm1 = hmove_value(val >> 4) as usize },
+
+            // HMBL    1111....  horizontal motion ball
+            0x0024 => { self.hmbl = hmove_value(val >> 4) as usize },
+
+            // HMOVE   <strobe>  apply horizontal motion
+            0x002a => {
+                self.p0_x = (self.p0_x + self.hmp0) % 160;
+                self.p1_x = (self.p1_x + self.hmp1) % 160;
+                self.m0_x = (self.m0_x + self.hmm0) % 160;
+                self.m1_x = (self.m1_x + self.hmm1) % 160;
+                self.bl_x = (self.bl_x + self.hmbl) % 160;
+            },
+
+            // HMCLR   <strobe>  clear horizontal motion registers
+            0x002b => {
+                self.hmp0 = 0;
+                self.hmp1 = 0;
+                self.hmm0 = 0;
+                self.hmm1 = 0;
+                self.hmbl = 0;
             },
 
             //
@@ -534,7 +532,7 @@ impl Bus for TIA {
 
             0x0015 ..= 0x001a => { },
 
-            _ => { }, // unimplemented!("register: 0x{:04X} 0x{:02X}", address, val),
+            _ => debug!("register: 0x{:04X} 0x{:02X}", address, val), 
         }
     }
 }

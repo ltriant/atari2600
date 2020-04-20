@@ -28,30 +28,32 @@ pub struct TIA {
     colors: Rc<RefCell<Colors>>,
     pf: Playfield,
 
-    // Player sprites
+    // Player 0
     grp0: u8,
-    grp1: u8,
     refp0: bool,
-    refp1: bool,
     p0_x: usize,
+    hmp0: usize,
+
+    // Player 1
+    grp1: u8,
+    refp1: bool,
     p1_x: usize,
+    hmp1: usize,
 
-    // Missile sprites
+    // Missile 0
     m0_x: usize,
-    m1_x: usize,
     enam0: bool,
-    enam1: bool,
+    hmm0: usize,
 
-    // Ball sprite
+    // Missile 1
+    m1_x: usize,
+    enam1: bool,
+    hmm1: usize,
+
+    // Ball
     bl_x: usize,
     enabl: bool,
     bl_size: usize,
-
-    // Horizontal movement
-    hmp0: usize,
-    hmp1: usize,
-    hmm0: usize,
-    hmm1: usize,
     hmbl: usize,
 }
 

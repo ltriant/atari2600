@@ -379,7 +379,7 @@ impl Bus for TIA {
             // CTRLPF  ..11.111  control playfield ball size & collisions
             0x000a => {
                 self.pf.set_control(val);
-                self.bl_size              = match (val & 0b0011_0000) >> 4 {
+                self.bl_size = match (val & 0b0011_0000) >> 4 {
                     0 => 1,
                     1 => 2,
                     2 => 4,
@@ -509,6 +509,26 @@ impl Bus for TIA {
 
             // HMBL    1111....  horizontal motion ball
             0x0024 => { self.hmbl = hmove_value(val >> 4) as usize },
+
+            // RESMP0  ......1.  reset missile 0 to player 0
+            0x0028 => {
+                if (val & 0x02) != 0 {
+                    // TODO base on NUSIZ0
+                    // The centering offset is +3 for normal, +6 for double, and
+                    // +10 quad sized player.
+                    self.m0_x = self.p0_x + 3;
+                }
+            },
+
+            // RESMP1  ......1.  reset missile 1 to player 1
+            0x0029 => {
+                if (val & 0x02) != 0 {
+                    // TODO base on NUSIZ1
+                    // The centering offset is +3 for normal, +6 for double, and
+                    // +10 quad sized player.
+                    self.m1_x = self.p1_x + 3;
+                }
+            },
 
             // HMOVE   <strobe>  apply horizontal motion
             0x002a => {

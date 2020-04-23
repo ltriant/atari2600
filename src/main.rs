@@ -10,6 +10,8 @@ use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::rc::Rc;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::bus::AtariBus;
 use crate::cpu6507::CPU6507;
@@ -18,6 +20,9 @@ use crate::tia::TIA;
 use sdl2::pixels::Color;
 use sdl2::event::Event;
 use sdl2::rect::Rect;
+
+const ATARI_FPS: f64 = 60.0;
+const FRAME_DURATION: Duration = Duration::from_millis(((1.0 / ATARI_FPS) * 1000.0) as u64);
 
 fn main() {
     env_logger::init();
@@ -62,6 +67,7 @@ fn main() {
 
     let mut event_pump = sdl_context.event_pump().unwrap();
     let mut poll_keyboard = false;
+    let mut fps_start = Instant::now();
 
     'running: loop {
         let cpu_cycles = if tia.borrow().cpu_halt() {
@@ -78,7 +84,12 @@ fn main() {
             if rv.end_of_frame {
                 canvas.present();
                 poll_keyboard = true;
-                std::thread::sleep(std::time::Duration::from_millis(2));
+
+                if let Some(delay) = FRAME_DURATION.checked_sub(fps_start.elapsed()) {
+                    thread::sleep(delay);
+                }
+
+                fps_start = Instant::now();
             }
         }
 

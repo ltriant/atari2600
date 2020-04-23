@@ -326,10 +326,7 @@ impl Bus for TIA {
     // https://problemkaputt.de/2k6specs.htm#memoryandiomap
 
     fn read(&mut self, address: u16) -> u8 {
-        match address {
-            0x0282 => { 0b0000_1000 },
-            _ => 0,
-        }
+        0
     }
 
     fn write(&mut self, address: u16, val: u8) {

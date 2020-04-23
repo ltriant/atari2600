@@ -38,6 +38,7 @@ impl Bus for AtariBus {
             0x0080 ..= 0x00ff => self.ram[address as usize - 0x80],
 
             // RIOT registers
+            0x0282 => 0b0000_1000,
             0x0200 ..= 0x02ff => 0,
 
             // Cartridge ROM

@@ -21,6 +21,7 @@ pub struct TIA {
     // Vertical sync
     vsync: bool,
     vblank: bool,
+    late_reset_hblank: bool,
 
     // Horizontal sync
     wsync: bool,
@@ -108,6 +109,7 @@ impl TIA {
             vsync: false,
             vblank: false,
             wsync: false,
+            late_reset_hblank: false,
 
             colors: colors,
             pf: pf,
@@ -284,7 +286,12 @@ impl TIA {
                 3
             );
 
-            let color = self.get_pixel_color(x as usize) as usize;
+            let color = if self.late_reset_hblank && x < 8 {
+                0
+            } else {
+                self.get_pixel_color(x as usize)
+            };
+
             canvas.set_draw_color(NTSC_PALETTE[color as usize]);
             canvas.fill_rect(rect).unwrap();
         }
@@ -314,6 +321,7 @@ impl TIA {
             // Simply writing to the WSYNC causes the microprocessor to halt
             // until the electron beam reaches the right edge of the screen.
             self.wsync = false;
+            self.late_reset_hblank = false;
         }
 
         self.tick();
@@ -534,6 +542,8 @@ impl Bus for TIA {
                 self.m0_x = (self.m0_x + self.hmm0) % 160;
                 self.m1_x = (self.m1_x + self.hmm1) % 160;
                 self.bl_x = (self.bl_x + self.hmbl) % 160;
+
+                self.late_reset_hblank = true;
             },
 
             // HMCLR   <strobe>  clear horizontal motion registers

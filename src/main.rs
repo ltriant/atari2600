@@ -66,34 +66,26 @@ fn main() {
     }
 
     let mut event_pump = sdl_context.event_pump().unwrap();
-    let mut poll_keyboard = false;
+    let mut end_of_frame = false;
     let mut fps_start = Instant::now();
 
     'running: loop {
-        let cpu_cycles = if tia.borrow().cpu_halt() {
+        let tia_cycles = if tia.borrow().cpu_halt() {
             1
         } else {
-            cpu.clock()
+            3 * cpu.clock()
         };
-
-        let tia_cycles = cpu_cycles * 3;
 
         for _ in 0 .. tia_cycles {
             let rv = tia.borrow_mut().clock(&mut canvas);
 
             if rv.end_of_frame {
                 canvas.present();
-                poll_keyboard = true;
-
-                if let Some(delay) = FRAME_DURATION.checked_sub(fps_start.elapsed()) {
-                    thread::sleep(delay);
-                }
-
-                fps_start = Instant::now();
+                end_of_frame = true;
             }
         }
 
-        if poll_keyboard {
+        if end_of_frame {
             for event in event_pump.poll_iter() {
                 match event {
                     Event::Quit { .. } => { break 'running },
@@ -101,7 +93,13 @@ fn main() {
                 }
             }
 
-            poll_keyboard = false;
+            if let Some(delay) = FRAME_DURATION.checked_sub(fps_start.elapsed()) {
+                thread::sleep(delay);
+            }
+
+            fps_start = Instant::now();
+
+            end_of_frame = false;
         }
     }
 }

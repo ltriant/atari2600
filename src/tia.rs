@@ -45,11 +45,13 @@ pub struct TIA {
     m0_x: usize,
     enam0: bool,
     hmm0: usize,
+    m0_size: usize,
 
     // Missile 1
     m1_x: usize,
     enam1: bool,
     hmm1: usize,
+    m1_size: usize,
 
     // Ball
     bl_x: usize,
@@ -125,6 +127,8 @@ impl TIA {
             m1_x: 0,
             enam0: false,
             enam1: false,
+            m0_size: 0,
+            m1_size: 0,
 
             bl_x: 0,
             enabl: false,
@@ -414,7 +418,8 @@ impl Bus for TIA {
 
             // NUSIZ0  ..111111  number-size player-missile 0
             0x0004 => {
-                let size = match (val & 0b0011_0000) >> 4 {
+                // TODO the other flags
+                self.m0_size = match (val & 0b0011_0000) >> 4 {
                     0 => 1,
                     1 => 2,
                     2 => 4,
@@ -424,7 +429,16 @@ impl Bus for TIA {
             },
 
             // NUSIZ1  ..111111  number-size player-missile 1
-            0x0005 => { },
+            0x0005 => {
+                // TODO the other flags
+                self.m1_size = match (val & 0b0011_0000) >> 4 {
+                    0 => 1,
+                    1 => 2,
+                    2 => 4,
+                    3 => 8,
+                    _ => unreachable!(),
+                };
+            },
 
             // REFP0   ....1...  reflect player 0
             0x000b => { self.refp0 = (val & 0b0000_1000) != 0 },
@@ -518,20 +532,32 @@ impl Bus for TIA {
             // RESMP0  ......1.  reset missile 0 to player 0
             0x0028 => {
                 if (val & 0x02) != 0 {
-                    // TODO base on NUSIZ0
                     // The centering offset is +3 for normal, +6 for double, and
                     // +10 quad sized player.
-                    self.m0_x = self.p0_x + 3;
+                    let offset = match self.m0_size {
+                        1 => 3,
+                        2 => 6,
+                        4 => 10,
+                        8 => 15, // TODO can't find this offset
+                        _ => unreachable!(),
+                    };
+                    self.m0_x = self.p0_x + offset;
                 }
             },
 
             // RESMP1  ......1.  reset missile 1 to player 1
             0x0029 => {
                 if (val & 0x02) != 0 {
-                    // TODO base on NUSIZ1
                     // The centering offset is +3 for normal, +6 for double, and
                     // +10 quad sized player.
-                    self.m1_x = self.p1_x + 3;
+                    let offset = match self.m0_size {
+                        1 => 3,
+                        2 => 6,
+                        4 => 10,
+                        8 => 15, // TODO can't find this offset
+                        _ => unreachable!(),
+                    };
+                    self.m1_x = self.p1_x + offset;
                 }
             },
 

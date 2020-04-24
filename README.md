@@ -10,12 +10,15 @@ An Atari 2600 emulator, for those who like to step back in time to the console w
 4. ~~SDL integration~~
 5. ~~Basic TIA frame timing~~
 6. ~~Playfield rendering~~
-7. Missle graphics
-8. Ball graphics
-9. Player graphics
-10. The rest of TIA registers
-11. Better frame timing
-12. ...
-13. Keyboard/joystick input
+7. ~~Missle graphics~~
+8. ~~Ball graphics~~
+9. ~~Player graphics~~
+10. Horizontal positioning
+11. Vertical delay
+12. Collision flags
+13. Better frame timing
 14. ...
-15. Adventure time!
+15. RIOT chip (MOS 6532) for peripherals
+16. Audio
+17. ..
+18. Adventure time!

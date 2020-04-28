@@ -265,20 +265,33 @@ impl CPU6507 {
 
     pub fn adc(&mut self, addr: u16) {
         let val = self.read(addr);
-        let n = (self.a as u16) + (val as u16) + (self.c as u16);
-        let a = (n & 0x00ff) as u8;
 
-        self.update_sz(a);
-        self.c = n > 0xff;
+        if self.d {
+            let v1 = (self.a / 16) * 10 + (self.a % 16);
+            let v2 = (val / 16) * 10 + (val % 16);
+            let n  = (v1 as u16) + (v2 as u16) + (self.c as u16);
+            let a  = (n & 0x00ff) as u8;
 
-        // The first condition checks if the sign of the accumulator and the
-        // the sign of value that we're adding are the same.
-        //
-        // The second condition checks if the result of the addition has a
-        // different sign to either of the values we added together.
-        self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
+            self.update_sz(a);
+            self.c = (v1 + v2) > 99;
+            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
+            self.a = a;
+        } else {
+            let n = (self.a as u16) + (val as u16) + (self.c as u16);
+            let a = (n & 0x00ff) as u8;
 
-        self.a = a;
+            self.update_sz(a);
+            self.c = n > 0xff;
+
+            // The first condition checks if the sign of the accumulator and the
+            // the sign of value that we're adding are the same.
+            //
+            // The second condition checks if the result of the addition has a
+            // different sign to either of the values we added together.
+            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
+
+            self.a = a;
+        }
     }
 
     pub fn and(&mut self, addr: u16) {
@@ -604,20 +617,32 @@ impl CPU6507 {
         let val = ! val;
 
         // Everything below is exactly the same as the adc function.
-        let n = (self.a as u16) + (val as u16) + (self.c as u16);
-        let a = (n & 0x00ff) as u8;
+        if self.d {
+            let v1 = (self.a / 16) * 10 + (self.a % 16);
+            let v2 = (val / 16) * 10 + (val % 16);
+            let n  = (v1 as u16) + (v2 as u16) + (self.c as u16);
+            let a  = (n & 0x00ff) as u8;
 
-        self.update_sz(a);
-        self.c = n > 0xff;
+            self.update_sz(a);
+            self.c = (v1 + v2) > 99;
+            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
+            self.a = a;
+        } else {
+            let n = (self.a as u16) + (val as u16) + (self.c as u16);
+            let a = (n & 0x00ff) as u8;
 
-        // The first condition checks if the sign of the accumulator and the
-        // the sign of value that we're adding are the same.
-        //
-        // The second condition checks if the result of the addition has a
-        // different sign to either of the values we added together.
-        self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
+            self.update_sz(a);
+            self.c = n > 0xff;
 
-        self.a = a;
+            // The first condition checks if the sign of the accumulator and the
+            // the sign of value that we're adding are the same.
+            //
+            // The second condition checks if the result of the addition has a
+            // different sign to either of the values we added together.
+            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
+
+            self.a = a;
+        }
     }
 
     pub fn sec(&mut self) {

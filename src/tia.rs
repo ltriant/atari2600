@@ -284,9 +284,9 @@ impl TIA {
             let y = self.scanline - 40;
 
             let rect = Rect::new(
-                (x as i32) * 5,
+                (x as i32) * 4,
                 (y as i32) * 3,
-                5,
+                4,
                 3
             );
 

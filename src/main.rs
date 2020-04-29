@@ -45,7 +45,7 @@ fn main() {
     // SDL-related stuffs
     //
 
-    let width  = 160 * 5;
+    let width  = 160 * 4;
     let height = 192 * 3;
 
     let sdl_context = sdl2::init().unwrap();

@@ -167,7 +167,7 @@ impl TIA {
     }
 
     fn get_m0_color(&self, x: usize) -> Option<u8> {
-        if x == self.m0_x && self.enam0 {
+        if x >= self.m0_x && x < self.m0_x + self.m0_size && self.enam0 {
             Some(self.colors.borrow().colup0())
         } else {
             None
@@ -175,7 +175,7 @@ impl TIA {
     }
 
     fn get_m1_color(&self, x: usize) -> Option<u8> {
-        if x == self.m1_x && self.enam1 {
+        if x >= self.m1_x && x < self.m1_x + self.m1_size && self.enam1 {
             Some(self.colors.borrow().colup1())
         } else {
             None

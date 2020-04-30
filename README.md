@@ -2,6 +2,8 @@
 
 An Atari 2600 emulator, for those who like to step back in time to the console wars of the 80s.
 
+The goal of this is to be able to play a couple of key games that have sentimental value to me, rather than attempting to be a highly accurate emulator that can play the vast library of games available. For that, there's [Stella](https://github.com/stella-emu/stella).
+
 # TODO
 
 1. ~~Docs~~ ([this](https://problemkaputt.de/2k6specs.htm) is great)

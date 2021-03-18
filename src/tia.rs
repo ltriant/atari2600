@@ -1,4 +1,6 @@
+mod ball;
 mod color;
+mod counter;
 mod palette;
 mod playfield;
 
@@ -6,22 +8,23 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use crate::bus::Bus;
+use crate::tia::ball::Ball;
 use crate::tia::color::Colors;
+use crate::tia::counter::Counter;
 use crate::tia::palette::NTSC_PALETTE;
 use crate::tia::playfield::Playfield;
 
-use sdl2::rect::Rect;
-use sdl2::render::Canvas;
-use sdl2::video::Window;
+use sdl2::pixels::Color;
 
 pub struct TIA {
-    dot: u16,
     scanline: u16,
+
+    ctr: Counter,
 
     // Vertical sync
     vsync: bool,
     vblank: bool,
-    late_reset_hblank: bool,
+    late_reset_hblank: usize,
 
     // Horizontal sync
     wsync: bool,
@@ -54,67 +57,41 @@ pub struct TIA {
     m1_size: usize,
 
     // Ball
-    bl_x: usize,
-    enabl: bool,
-    bl_size: usize,
-    hmbl: usize,
+    bl: Ball,
+
+    // Counters
+    p0_ctr: usize,
+    p1_ctr: usize,
+    m0_ctr: usize,
+    m1_ctr: usize,
+
+    pixels: Vec<Vec<Color>>,
 }
 
 pub struct StepResult {
     pub end_of_frame: bool,
 }
 
-fn hmove_value(v: u8) -> u8 {
-    // Signed Motion Value (-8..-1=Right, 0=No motion, +1..+7=Left)
-
-    /*
-    match v & 0x0f {
-        0b0000 => 0,
-        0b0001 => 1,
-        0b0010 => 2,
-        0b0011 => 3,
-        0b0100 => 4,
-        0b0101 => 5,
-        0b0110 => 6,
-        0b0111 => 7,
-
-        0b1000 => -1,
-        0b1001 => -2,
-        0b1010 => -3,
-        0b1011 => -4,
-        0b1100 => -5,
-        0b1101 => -6,
-        0b1110 => -7,
-        0b1111 => -8,
-        _ => unreachable!(),
-    }
-    */
-
-    if v == 0 {
-        0
-    } else if v < 8 {
-        v + 8
-    } else {
-        v - 8
-    }
-}
-
 impl TIA {
     pub fn new_tia() -> Self {
         let colors = Rc::new(RefCell::new(Colors::new_colors()));
         let pf = Playfield::new_playfield(colors.clone());
+        let bl = Ball::new_ball(colors.clone());
 
         Self {
-            dot: 0,
             scanline: 0,
+
+            // The horizontal sync counter has a period of 57
+            ctr: Counter::new_counter(57),
 
             vsync: false,
             vblank: false,
             wsync: false,
-            late_reset_hblank: false,
+            late_reset_hblank: 0,
 
             colors: colors,
             pf: pf,
+            bl: bl,
 
             grp0: 0,
             grp1: 0,
@@ -130,39 +107,39 @@ impl TIA {
             m0_size: 0,
             m1_size: 0,
 
-            bl_x: 0,
-            enabl: false,
-            bl_size: 0,
-
             hmp0: 0,
             hmp1: 0,
             hmm0: 0,
             hmm1: 0,
-            hmbl: 0,
+
+            p0_ctr: 0,
+            p1_ctr: 0,
+            m0_ctr: 0,
+            m1_ctr: 0,
+
+            pixels: vec![vec![Color::RGB(0, 0, 0); 160]; 192],
         }
     }
 
     pub fn cpu_halt(&self) -> bool { self.wsync }
 
-    fn in_hblank(&self) -> bool { self.dot < 68 }
-
-    fn tick(&mut self) {
-        self.dot += 1;
-        if self.dot == 228 {
-            self.scanline += 1;
-            self.dot = 0;
-
-            if self.scanline >= 262 {
-                self.scanline = 0;
-            }
-        }
+    fn in_hblank(&self) -> bool {
+        self.ctr.internal_value < (68 + self.late_reset_hblank as u8)
     }
 
-    fn get_bl_color(&self, x: usize) -> Option<u8> {
-        if x >= self.bl_x && x < self.bl_x + self.bl_size && self.enabl {
-            Some(self.colors.borrow().colupf())
-        } else {
-            None
+    pub fn get_pixels(&self) -> &Vec<Vec<Color>> { &self.pixels }
+
+    fn tick(&mut self) {
+        // If we hit the last scanline, we have to wait for the programmer to
+        // signal a VSYNC to reset the gun.
+        if self.scanline >= 262 {
+            return;
+        }
+
+        self.ctr.internal_value += 1;
+        if self.ctr.internal_value == 228 {
+            self.scanline += 1;
+            self.ctr.internal_value = 0;
         }
     }
 
@@ -237,7 +214,7 @@ impl TIA {
                 .or(self.get_p1_color(x))
                 .or(self.get_m1_color(x))
                 .or(self.pf.get_color(x))
-                .or(self.get_bl_color(x))
+                .or(self.bl.get_color())
                 .unwrap_or(self.colors.borrow().colubk())
         } else {
             // Optionally, the playfield and ball may be assigned to have higher
@@ -250,7 +227,7 @@ impl TIA {
             //  4 (lowest)   COLUBK   BK
 
             self.pf.get_color(x)
-                .or(self.get_bl_color(x))
+                .or(self.bl.get_color())
                 .or(self.get_p0_color(x))
                 .or(self.get_m0_color(x))
                 .or(self.get_p1_color(x))
@@ -259,7 +236,7 @@ impl TIA {
         }
     }
 
-    pub fn clock(&mut self, canvas: &mut Canvas<Window>) -> StepResult {
+    pub fn clock(&mut self) -> StepResult {
         // https://www.randomterrain.com/atari-2600-memories-tutorial-andrew-davie-08.html
         //
         // There are 262 scanlines per frame
@@ -276,59 +253,41 @@ impl TIA {
             end_of_frame: false,
         };
 
+        let clocked = self.ctr.clock();
+
+        let visible_cycle = self.ctr.value() >= 17 && self.ctr.value() <= 56;
         let visible_scanline = self.scanline >= 40 && self.scanline < 232;
-        let visible_cycle = self.dot >= 68 && self.dot < 228;
 
-        if visible_scanline && visible_cycle {
-            let x = self.dot - 68;
-            let y = self.scanline - 40;
-
-            let rect = Rect::new(
-                (x as i32) * 4,
-                (y as i32) * 3,
-                4,
-                3
-            );
-
-            let color = if self.late_reset_hblank && x < 8 {
-                0
+        if visible_scanline {
+            if visible_cycle {
+                let x = self.ctr.internal_value as usize - 68;
+                let y = self.scanline as usize - 40;
+                let color = self.get_pixel_color(x) as usize;
+                self.pixels[y][x] = NTSC_PALETTE[color];
+                self.bl.tick_visible();
             } else {
-                self.get_pixel_color(x as usize)
-            };
-
-            canvas.set_draw_color(NTSC_PALETTE[color as usize]);
-            canvas.fill_rect(rect).unwrap();
+                //self.bl.tick_hblank();
+            }
         }
 
-        if self.scanline == 0 && self.dot == 0 {
-            self.vsync = false;
-        }
-
-        if self.scanline == 3 && self.dot == 0 {
-            // VBlank start
-            rv.end_of_frame = true;
-        }
-
-        if self.scanline == 40 && self.dot == 0 {
-            // VBlank end
-        }
-
-        if self.dot == 0 {
-            // HBlank start
-        }
-
-        if self.dot == 67 {
-            // HBlank end
-        }
-
-        if self.dot == 227 {
-            // Simply writing to the WSYNC causes the microprocessor to halt
-            // until the electron beam reaches the right edge of the screen.
+        // If we've reset the counter back to 0, we've finished the scanline and started a new
+        // scanline.
+        if clocked && self.ctr.value() == 0 {
+            // Simply writing to the WSYNC causes the microprocessor to halt until the electron
+            // beam reaches the right edge of the screen.
             self.wsync = false;
-            self.late_reset_hblank = false;
-        }
 
-        self.tick();
+            // If we hit the last scanline, we have to wait for the programmer to signal a
+            // VSYNC to reset the gun.
+            if self.scanline < 262 {
+                self.scanline += 1;
+            }
+
+            if self.scanline == 3 {
+                // VBlank started
+                rv.end_of_frame = true;
+            }
+        }
 
         rv
     }
@@ -351,9 +310,8 @@ impl Bus for TIA {
             0x0000 => {
                 self.vsync = (val & 0x02) != 0;
 
-                // TODO this feels hacky
                 if self.vsync {
-                    self.dot = 0;
+                    self.ctr.internal_value = 0;
                     self.scanline = 0;
                 }
             },
@@ -388,13 +346,14 @@ impl Bus for TIA {
             // CTRLPF  ..11.111  control playfield ball size & collisions
             0x000a => {
                 self.pf.set_control(val);
-                self.bl_size = match (val & 0b0011_0000) >> 4 {
+                let ball_size = match (val & 0b0011_0000) >> 4 {
                     0 => 1,
                     1 => 2,
                     2 => 4,
                     3 => 8,
                     _ => unreachable!(),
                 };
+                self.bl.set_size(ball_size);
 
                 // TODO the other bits
             },
@@ -455,7 +414,7 @@ impl Bus for TIA {
                 self.p0_x = if self.in_hblank() {
                     3
                 } else {
-                    self.dot as usize - 68
+                    self.ctr.internal_value as usize - 68
                 };
             },
 
@@ -464,7 +423,7 @@ impl Bus for TIA {
                 self.p1_x = if self.in_hblank() {
                     3
                 } else {
-                    self.dot as usize - 68
+                    self.ctr.internal_value as usize - 68
                 };
             },
 
@@ -473,7 +432,7 @@ impl Bus for TIA {
                 self.m0_x = if self.in_hblank() {
                     2
                 } else {
-                    self.dot as usize - 68
+                    self.ctr.internal_value as usize - 68
                 };
             },
 
@@ -482,18 +441,12 @@ impl Bus for TIA {
                 self.m1_x = if self.in_hblank() {
                     2
                 } else {
-                    self.dot as usize - 68
+                    self.ctr.internal_value as usize - 68
                 };
             },
 
             // RESBL   <strobe>  reset ball
-            0x0014 => {
-                self.bl_x = if self.in_hblank() {
-                    2
-                } else {
-                    self.dot as usize - 68
-                };
-            },
+            0x0014 => { self.bl.reset() },
 
             // GRP0    11111111  graphics player 0
             0x001b => { self.grp0 = val },
@@ -508,7 +461,7 @@ impl Bus for TIA {
             0x001e => { self.enam1 = (val & 0x02) != 0 },
 
             // ENABL   ......1.  graphics (enable) ball
-            0x001f => { self.enabl = (val & 0x02) != 0 },
+            0x001f => { self.bl.set_enabled((val & 0x02) != 0) },
 
             //
             // Horizontal motion
@@ -527,7 +480,16 @@ impl Bus for TIA {
             0x0023 => { self.hmm1 = hmove_value(val >> 4) as usize },
 
             // HMBL    1111....  horizontal motion ball
-            0x0024 => { self.hmbl = hmove_value(val >> 4) as usize },
+            0x0024 => { self.bl.set_hmove_value(val >> 4) },
+
+            // VDELP0  .......1  vertical delay player 0
+            0x0025 => { debug!("VDELP0 {}", val & 0x01); }
+
+            // VDELP1  .......1  vertical delay player 1
+            0x0026 => { debug!("VDELP1 {}", val & 0x01); }
+
+            // VDELBL  .......1  vertical delay ball
+            0x0027 => { debug!("VDELBL {}", val & 0x01); }
 
             // RESMP0  ......1.  reset missile 0 to player 0
             0x0028 => {
@@ -567,9 +529,11 @@ impl Bus for TIA {
                 self.p1_x = (self.p1_x + self.hmp1) % 160;
                 self.m0_x = (self.m0_x + self.hmm0) % 160;
                 self.m1_x = (self.m1_x + self.hmm1) % 160;
-                self.bl_x = (self.bl_x + self.hmbl) % 160;
 
-                self.late_reset_hblank = true;
+                //self.bl_x = (self.bl_x + self.hmbl) % 160;
+                self.bl.start_hmove();
+
+                self.late_reset_hblank = 8;
             },
 
             // HMCLR   <strobe>  clear horizontal motion registers
@@ -578,7 +542,7 @@ impl Bus for TIA {
                 self.hmp1 = 0;
                 self.hmm0 = 0;
                 self.hmm1 = 0;
-                self.hmbl = 0;
+                self.bl.hmclr();
             },
 
             //
@@ -589,5 +553,17 @@ impl Bus for TIA {
 
             _ => debug!("register: 0x{:04X} 0x{:02X}", address, val), 
         }
+    }
+}
+
+fn hmove_value(v: u8) -> u8 {
+    // Signed Motion Value (-8..-1=Right, 0=No motion, +1..+7=Left)
+
+    if v == 0 {
+        0
+    } else if v < 8 {
+        v + 8
+    } else {
+        v - 8
     }
 }

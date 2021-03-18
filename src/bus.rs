@@ -42,7 +42,7 @@ impl Bus for AtariBus {
             0x0200 ..= 0x02ff => 0,
 
             // Cartridge ROM
-            0x1000 ..= 0x1fff => self.rom[address as usize - 0x1000],
+            0x1000 ..= 0x1fff => self.rom[address as usize & 0xfff],
 
             _ => 0,
         }

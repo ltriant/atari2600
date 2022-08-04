@@ -1,5 +1,6 @@
 pub struct Counter {
     period: u8,
+    reset_value: u8,
     pub internal_value: u8,
 
     last_value: u8,
@@ -16,9 +17,10 @@ fn hmove_value(v: u8) -> u8 {
 }
 
 impl Counter {
-    pub fn new_counter(period: u8) -> Self {
+    pub fn new_counter(period: u8, reset_value: u8) -> Self {
         Self {
             period: period,
+            reset_value: reset_value,
             internal_value: 0,
 
             last_value: 0,
@@ -27,7 +29,7 @@ impl Counter {
     }
 
     pub fn reset(&mut self) {
-        self.internal_value = (self.period - 1) * 4;
+        self.internal_value = self.reset_value * 4;
     }
 
     pub fn value(&self) -> u8 {
@@ -39,7 +41,8 @@ impl Counter {
     }
 
     pub fn clock(&mut self) -> bool {
-        self.internal_value = (self.internal_value + 1) % (self.period * 4);
+        self.internal_value += 1;
+        self.internal_value %= self.period * 4;
 
         if self.last_value != self.value() {
             self.last_value = self.value();
@@ -52,14 +55,15 @@ impl Counter {
     pub fn start_hmove(&mut self, hm_val: u8) {
         self.clocks_to_add = hmove_value(hm_val);
         if hm_val != 0 {
-            debug!("adding clocks: {} ({})", self.clocks_to_add, hm_val);
+            debug!("adding clocks: {} ({})", self.clocks_to_add, hm_val >> 4);
         }
     }
 
     pub fn apply_hmove(&mut self) -> bool {
         if self.clocks_to_add != 0 {
             self.clocks_to_add -= 1;
-            return true;
+
+            return self.clocks_to_add != 0;
         }
 
         return false;
@@ -72,23 +76,35 @@ mod tests {
 
     #[test]
     fn test_clocking() {
-        let mut ctr = Counter::new_counter(40);
+        let mut ctr = Counter::new_counter(40, 0);
 
         assert_eq!(ctr.value(), 0);
 
-        ctr.clock();
+        let mut clocked = ctr.clock();
+        assert!(!clocked);
         assert_eq!(ctr.value(), 0);
-        ctr.clock();
-        assert_eq!(ctr.value(), 0);
-        ctr.clock();
-        assert_eq!(ctr.value(), 0);
-        let clocked = ctr.clock();
 
+        clocked = ctr.clock();
+        assert!(!clocked);
+        assert_eq!(ctr.value(), 0);
+
+        clocked = ctr.clock();
+        assert!(!clocked);
+        assert_eq!(ctr.value(), 0);
+
+        clocked = ctr.clock();
         assert!(clocked);
         assert_eq!(ctr.value(), 1);
 
-        for _ in 1 ..= 152 {
-            ctr.clock();
+        for i in 1 ..= 152 {
+            clocked = ctr.clock();
+
+            if i % 4 == 0 {
+                assert!(clocked);
+            }
+            else {
+                assert!(!clocked);
+            }
         }
 
         assert_eq!(ctr.value(), 39);

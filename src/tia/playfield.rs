@@ -2,9 +2,11 @@ use std::rc::Rc;
 use std::cell::RefCell;
 
 use crate::tia::color::Colors;
+use crate::tia::counter::Counter;
 
 pub struct Playfield {
     colors: Rc<RefCell<Colors>>,
+    ctr: Counter,
 
     // 20-bit playfield
     // .... | .... .... | .... ....
@@ -23,6 +25,7 @@ impl Playfield {
     pub fn new_playfield(colors: Rc<RefCell<Colors>>) -> Self {
         Self {
             colors: colors,
+            ctr: Counter::new_counter(57, 0),
 
             pf0: 0,
             pf1: 0,
@@ -33,6 +36,10 @@ impl Playfield {
             score_mode: false,
             priority: false,
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.ctr.reset();
     }
 
     pub fn set_pf0(&mut self, val: u8) {
@@ -72,11 +79,15 @@ impl Playfield {
 
     pub fn priority(&self) -> bool { self.priority }
 
-    pub fn get_color(&self, x: usize) -> Option<u8> {
-        if x < 80 {
-            // The playfield makes up the left-most side of the screen.
+    pub fn get_color(&self) -> Option<u8> {
+        let ctr = self.ctr.value();
 
-            let pf_x = x / 4;
+        if ctr <= 16 {
+            return None;
+        }
+
+        if ctr <= 36 {
+            let pf_x = ctr - 17;
 
             if self.pf[pf_x as usize] {
                 return if self.score_mode {
@@ -90,7 +101,7 @@ impl Playfield {
             // screen, optionally mirrored horizontally as denoted by the
             // CTRLPF register.
 
-            let pf_x = (x - 80) / 4;
+            let pf_x = ctr - 36 - 1;
 
             let idx = if self.horizontal_mirror {
                 self.pf.len() - 1 - pf_x as usize
@@ -110,4 +121,7 @@ impl Playfield {
         return None;
     }
 
+    pub fn clock(&mut self) {
+        self.ctr.clock();
+    }
 }

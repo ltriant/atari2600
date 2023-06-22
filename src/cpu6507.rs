@@ -13,7 +13,7 @@ const STACK_INIT: u8 = 0xff;
 const DOTS_PER_SCANLINE: u64 = 228;
 
 lazy_static!{
-    static ref ATARI_CPU_DEBUG: bool = match env::var("ATARI_CPU_DEBUG") {
+    static ref CPU6507_DEBUG: bool = match env::var("CPU6507_DEBUG") {
         Ok(val) => val != "" && val != "0",
         Err(_)  => false,
     };
@@ -239,7 +239,7 @@ impl CPU6507 {
 
         let op = &OPCODES[opcode as usize];
 
-        if *ATARI_CPU_DEBUG {
+        if *CPU6507_DEBUG {
             self.debug(&op);
         }
 

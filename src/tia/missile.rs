@@ -1,11 +1,13 @@
 use std::rc::Rc;
 use std::cell::RefCell;
 
+use crate::tia::PlayerType;
 use crate::tia::color::Colors;
 use crate::tia::counter::Counter;
 
 pub struct Missile {
     colors: Rc<RefCell<Colors>>,
+    sibling_player: PlayerType,
 
     enabled: bool,
     hmove_offset: u8,
@@ -14,9 +16,10 @@ pub struct Missile {
 }
 
 impl Missile {
-    pub fn new_missile(colors: Rc<RefCell<Colors>>) -> Self {
+    pub fn new_missile(colors: Rc<RefCell<Colors>>, sibling_player: PlayerType) -> Self {
         Self {
             colors: colors,
+            sibling_player: sibling_player,
 
             enabled: false,
             hmove_offset: 0,
@@ -60,9 +63,12 @@ impl Missile {
     pub fn get_color(&self) -> Option<u8> {
         // TODO this is wrong
         //if x >= self.m0_x && x < self.m0_x + self.m0_size && self.enam0 {
-        debug!("size: {}", self.size);
         if self.enabled && self.ctr.internal_value < self.size as u8 {
-            return Some(self.colors.borrow().colup0()); // m1 gets p1
+            let color = match self.sibling_player {
+                PlayerType::Player0 => self.colors.borrow().colup0(),
+                PlayerType::Player1 => self.colors.borrow().colup1(),
+            };
+            return Some(color);
         }
 
         return None;

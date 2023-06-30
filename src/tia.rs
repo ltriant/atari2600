@@ -3,6 +3,7 @@ mod color;
 mod counter;
 mod missile;
 mod palette;
+mod player;
 mod playfield;
 
 use std::rc::Rc;
@@ -14,9 +15,36 @@ use crate::tia::color::Colors;
 use crate::tia::counter::Counter;
 use crate::tia::missile::Missile;
 use crate::tia::palette::NTSC_PALETTE;
+use crate::tia::player::Player;
 use crate::tia::playfield::Playfield;
 
 use sdl2::pixels::Color;
+
+pub enum PlayerType {
+    Player0,
+    Player1,
+}
+
+// Set H-SYNC
+const SHS: u8 = 4;
+
+// Reset H-SYNC
+const RHS: u8 = 8;
+
+// ColourBurst
+const RCB: u8 = 12;
+
+// Reset H-BLANK
+const RHB: u8 = 16;
+
+// Late RHB
+const LRHB: u8 = 18;
+
+// Center
+const CNT: u8 = 36;
+
+// RESET, H-BLANK
+const SHB: u8 = 56;
 
 pub struct TIA {
     scanline: u16,
@@ -35,10 +63,7 @@ pub struct TIA {
     pf: Playfield,
 
     // Player 0
-    grp0: u8,
-    refp0: bool,
-    p0_x: usize,
-    hmp0: usize,
+    p0: Player,
 
     // Player 1
     grp1: u8,
@@ -48,24 +73,12 @@ pub struct TIA {
 
     // Missile 0
     m0: Missile,
-    //m0_x: usize,
-    //enam0: bool,
-    //hmm0: usize,
-    //m0_size: usize,
 
     // Missile 1
-    m1_x: usize,
-    enam1: bool,
-    hmm1: usize,
-    m1_size: usize,
+    m1: Missile,
 
     // Ball
     bl: Ball,
-
-    // Counters
-    p0_ctr: usize,
-    p1_ctr: usize,
-    m1_ctr: usize,
 
     pixels: Vec<Vec<Color>>,
 }
@@ -79,7 +92,9 @@ impl TIA {
         let colors = Rc::new(RefCell::new(Colors::new_colors()));
         let pf = Playfield::new_playfield(colors.clone());
         let bl = Ball::new_ball(colors.clone());
-        let m0 = Missile::new_missile(colors.clone());
+        let m0 = Missile::new_missile(colors.clone(), PlayerType::Player0);
+        let m1 = Missile::new_missile(colors.clone(), PlayerType::Player1);
+        let p0 = Player::new_player(colors.clone(), PlayerType::Player0);
 
         Self {
             scanline: 0,
@@ -96,25 +111,13 @@ impl TIA {
             pf: pf,
             bl: bl,
             m0: m0,
+            m1: m1,
+            p0: p0,
 
-            grp0: 0,
             grp1: 0,
-            refp0: false,
             refp1: false,
-            p0_x: 0,
             p1_x: 0,
-
-            m1_x: 0,
-            enam1: false,
-            m1_size: 0,
-
-            hmp0: 0,
             hmp1: 0,
-            hmm1: 0,
-
-            p0_ctr: 0,
-            p1_ctr: 0,
-            m1_ctr: 0,
 
             pixels: vec![vec![Color::RGB(0, 0, 0); 160]; 192],
         }
@@ -127,33 +130,8 @@ impl TIA {
 
     pub fn get_pixels(&self) -> &Vec<Vec<Color>> { &self.pixels }
 
-    fn get_m1_color(&self, x: usize) -> Option<u8> {
-        if x >= self.m1_x && x < self.m1_x + self.m1_size && self.enam1 {
-            Some(self.colors.borrow().colup1())
-        } else {
-            None
-        }
-    }
-
-    fn get_p0_color(&self, x: usize) -> Option<u8> {
-        if x >= self.p0_x && x < self.p0_x + 8 {
-            let x = x - self.p0_x;
-
-            if self.refp0 {
-                if (self.grp0 & (1 << x)) != 0 {
-                    return Some(self.colors.borrow().colup0());
-                }
-            } else {
-                if (self.grp0 & (1 << (7 - x))) != 0 {
-                    return Some(self.colors.borrow().colup0());
-                }
-            }
-        }
-
-        return None;
-    }
-
     fn get_p1_color(&self, x: usize) -> Option<u8> {
+        return None;  // TODO removing this for now
         if x >= self.p1_x && x < self.p1_x + 8 {
             let x = x - self.p1_x;
 
@@ -185,10 +163,10 @@ impl TIA {
             //  3            COLUPF   BL, PF  (only BL in SCORE-mode)
             //  4 (lowest)   COLUBK   BK
 
-            self.get_p0_color(x)
+            self.p0.get_color()
                 .or(self.m0.get_color())
                 .or(self.get_p1_color(x))
-                .or(self.get_m1_color(x))
+                .or(self.m1.get_color())
                 .or(self.pf.get_color())
                 .or(self.bl.get_color())
                 .unwrap_or(self.colors.borrow().colubk())
@@ -204,22 +182,26 @@ impl TIA {
 
             self.pf.get_color()
                 .or(self.bl.get_color())
-                .or(self.get_p0_color(x))
+                .or(self.p0.get_color())
                 .or(self.m0.get_color())
                 .or(self.get_p1_color(x))
-                .or(self.get_m1_color(x))
+                .or(self.m1.get_color())
                 .unwrap_or(self.colors.borrow().colubk())
         }
     }
 
     fn visible_cycle(&self) -> bool {
+        self.ctr.value() > RHB && self.ctr.value() <= SHB
+    }
+
+    fn render_cycle(&self) -> bool {
         let hblank_ctr_value = if self.late_reset_hblank {
-            18
+            LRHB
         } else {
-            16
+            RHB
         };
 
-        self.ctr.value() > hblank_ctr_value && self.ctr.value() <= 56
+        self.ctr.value() > hblank_ctr_value && self.ctr.value() <= SHB
     }
 
     fn visible_scanline(&self) -> bool { self.scanline >= 40 && self.scanline < 232 }
@@ -250,11 +232,15 @@ impl TIA {
                 // Player, missile, and ball counters only get clocked on visible cycles
                 self.bl.tick_visible();
                 self.m0.tick_visible();
+                self.m1.tick_visible();
+                self.p0.tick_visible();
 
-                let x = self.ctr.internal_value as usize - 68;
-                let y = self.scanline as usize - 40;
-                let color = self.get_pixel_color(x) as usize;
-                self.pixels[y][x] = NTSC_PALETTE[color];
+                if self.render_cycle() {
+                    let x = self.ctr.internal_value as usize - 68;
+                    let y = self.scanline as usize - 40;
+                    let color = self.get_pixel_color(x) as usize;
+                    self.pixels[y][x] = NTSC_PALETTE[color];
+                }
             } else {
                 self.bl.tick_hblank();
             }
@@ -408,17 +394,19 @@ impl Bus for TIA {
             // NUSIZ1  ..111111  number-size player-missile 1
             0x0005 => {
                 // TODO the other flags
-                self.m1_size = match (val & 0b0011_0000) >> 4 {
+                let size = match (val & 0b0011_0000) >> 4 {
                     0 => 1,
                     1 => 2,
                     2 => 4,
                     3 => 8,
                     _ => unreachable!(),
                 };
+
+                self.m1.set_size(size);
             },
 
             // REFP0   ....1...  reflect player 0
-            0x000b => { self.refp0 = (val & 0b0000_1000) != 0 },
+            0x000b => { self.p0.set_horizontal_mirror((val & 0b0000_1000) != 0) },
 
             // REFP1   ....1...  reflect player 1
             0x000c => { self.refp1 = (val & 0b0000_1000) != 0 },
@@ -429,11 +417,7 @@ impl Bus for TIA {
                 // then the position is set to the left edge of the screen (plus
                 // a few pixels towards right: 3 pixels for P0/P1, and only 2
                 // pixels for M0/M1/BL).
-                self.p0_x = if self.in_hblank() {
-                    3
-                } else {
-                    self.ctr.internal_value as usize - 68
-                };
+                self.p0.reset();
             },
 
             // RESP1   <strobe>  reset player 1
@@ -453,11 +437,8 @@ impl Bus for TIA {
 
             // RESM1   <strobe>  reset missile 1
             0x0013 => {
-                self.m1_x = if self.in_hblank() {
-                    2
-                } else {
-                    self.ctr.internal_value as usize - 68
-                };
+                debug!("RESM1 {}", self.ctr.internal_value);
+                self.m1.reset();
             },
 
             // RESBL   <strobe>  reset ball
@@ -467,7 +448,7 @@ impl Bus for TIA {
             },
 
             // GRP0    11111111  graphics player 0
-            0x001b => { self.grp0 = val },
+            0x001b => { self.p0.set_graphic(val) },
 
             // GRP1    11111111  graphics player 1
             0x001c => { self.grp1 = val },
@@ -476,7 +457,7 @@ impl Bus for TIA {
             0x001d => { self.m0.set_enabled((val & 0x02) != 0) },
 
             // ENAM1   ......1.  graphics (enable) missile 1
-            0x001e => { self.enam1 = (val & 0x02) != 0 },
+            0x001e => { self.m1.set_enabled((val & 0x02) != 0) },
 
             // ENABL   ......1.  graphics (enable) ball
             0x001f => { self.bl.set_enabled((val & 0x02) != 0) },
@@ -486,7 +467,7 @@ impl Bus for TIA {
             //
 
             // HMP0    1111....  horizontal motion player 0
-            0x0020 => { self.hmp0 = hmove_value(val >> 4) as usize },
+            0x0020 => { self.p0.set_hmove_value(val) },
 
             // HMP1    1111....  horizontal motion player 1
             0x0021 => { self.hmp1 = hmove_value(val >> 4) as usize },
@@ -495,7 +476,7 @@ impl Bus for TIA {
             0x0022 => { self.m0.set_hmove_value(val) },
 
             // HMM1    1111....  horizontal motion missile 1
-            0x0023 => { self.hmm1 = hmove_value(val >> 4) as usize },
+            0x0023 => { self.m1.set_hmove_value(val) },
 
             // HMBL    1111....  horizontal motion ball
             0x0024 => { self.bl.set_hmove_value(val) },
@@ -520,27 +501,19 @@ impl Bus for TIA {
             // RESMP1  ......1.  reset missile 1 to player 1
             0x0029 => {
                 if (val & 0x02) != 0 {
-                    // The centering offset is +3 for normal, +6 for double, and
-                    // +10 quad sized player.
-                    let offset = match self.m1_size {
-                        1 => 3,
-                        2 => 6,
-                        4 => 10,
-                        8 => 15, // TODO can't find this offset
-                        _ => unreachable!(),
-                    };
-                    self.m1_x = self.p1_x + offset;
+                    //self.m1.reset_to_player(self.p1);
+                    self.m1.reset_to_player();
                 }
             },
 
             // HMOVE   <strobe>  apply horizontal motion
             0x002a => {
-                self.p0_x = (self.p0_x + self.hmp0) % 160;
                 self.p1_x = (self.p1_x + self.hmp1) % 160;
-                self.m1_x = (self.m1_x + self.hmm1) % 160;
 
                 self.bl.start_hmove();
                 self.m0.start_hmove();
+                self.m1.start_hmove();
+                self.p0.start_hmove();
 
                 debug!("HMOVE: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
 
@@ -549,11 +522,11 @@ impl Bus for TIA {
 
             // HMCLR   <strobe>  clear horizontal motion registers
             0x002b => {
-                self.hmp0 = 0;
                 self.hmp1 = 0;
-                self.hmm1 = 0;
                 self.bl.hmclr();
                 self.m0.hmclr();
+                self.m1.hmclr();
+                self.p0.hmclr();
             },
 
             //
@@ -567,14 +540,6 @@ impl Bus for TIA {
     }
 }
 
-fn hmove_value(v: u8) -> u8 {
-    // Signed Motion Value (-8..-1=Right, 0=No motion, +1..+7=Left)
-
-    if v == 0 {
-        0
-    } else if v < 8 {
-        v + 8
-    } else {
-        v - 8
-    }
+fn hmove_value(_v: u8) -> u8 {
+    return 0;
 }

@@ -1,6 +1,7 @@
 mod ball;
 mod color;
 mod counter;
+mod missile;
 mod palette;
 mod playfield;
 
@@ -11,6 +12,7 @@ use crate::bus::Bus;
 use crate::tia::ball::Ball;
 use crate::tia::color::Colors;
 use crate::tia::counter::Counter;
+use crate::tia::missile::Missile;
 use crate::tia::palette::NTSC_PALETTE;
 use crate::tia::playfield::Playfield;
 
@@ -45,10 +47,11 @@ pub struct TIA {
     hmp1: usize,
 
     // Missile 0
-    m0_x: usize,
-    enam0: bool,
-    hmm0: usize,
-    m0_size: usize,
+    m0: Missile,
+    //m0_x: usize,
+    //enam0: bool,
+    //hmm0: usize,
+    //m0_size: usize,
 
     // Missile 1
     m1_x: usize,
@@ -62,7 +65,6 @@ pub struct TIA {
     // Counters
     p0_ctr: usize,
     p1_ctr: usize,
-    m0_ctr: usize,
     m1_ctr: usize,
 
     pixels: Vec<Vec<Color>>,
@@ -77,6 +79,7 @@ impl TIA {
         let colors = Rc::new(RefCell::new(Colors::new_colors()));
         let pf = Playfield::new_playfield(colors.clone());
         let bl = Ball::new_ball(colors.clone());
+        let m0 = Missile::new_missile(colors.clone());
 
         Self {
             scanline: 0,
@@ -92,6 +95,7 @@ impl TIA {
             colors: colors,
             pf: pf,
             bl: bl,
+            m0: m0,
 
             grp0: 0,
             grp1: 0,
@@ -100,21 +104,16 @@ impl TIA {
             p0_x: 0,
             p1_x: 0,
 
-            m0_x: 0,
             m1_x: 0,
-            enam0: false,
             enam1: false,
-            m0_size: 0,
             m1_size: 0,
 
             hmp0: 0,
             hmp1: 0,
-            hmm0: 0,
             hmm1: 0,
 
             p0_ctr: 0,
             p1_ctr: 0,
-            m0_ctr: 0,
             m1_ctr: 0,
 
             pixels: vec![vec![Color::RGB(0, 0, 0); 160]; 192],
@@ -210,7 +209,7 @@ impl TIA {
             //  4 (lowest)   COLUBK   BK
 
             self.get_p0_color(x)
-                .or(self.get_m0_color(x))
+                .or(self.m0.get_color())
                 .or(self.get_p1_color(x))
                 .or(self.get_m1_color(x))
                 .or(self.pf.get_color(x))
@@ -226,15 +225,27 @@ impl TIA {
             //  3            COLUP1   P1, M1
             //  4 (lowest)   COLUBK   BK
 
-            self.pf.get_color(x)
+            self.pf.get_color()
                 .or(self.bl.get_color())
                 .or(self.get_p0_color(x))
-                .or(self.get_m0_color(x))
+                .or(self.m0.get_color())
                 .or(self.get_p1_color(x))
                 .or(self.get_m1_color(x))
                 .unwrap_or(self.colors.borrow().colubk())
         }
     }
+
+    fn visible_cycle(&self) -> bool {
+        let hblank_ctr_value = if self.late_reset_hblank {
+            18
+        } else {
+            16
+        };
+
+        self.ctr.value() > hblank_ctr_value && self.ctr.value() <= 56
+    }
+
+    fn visible_scanline(&self) -> bool { self.scanline >= 40 && self.scanline < 232 }
 
     pub fn clock(&mut self) -> StepResult {
         // https://www.randomterrain.com/atari-2600-memories-tutorial-andrew-davie-08.html
@@ -253,39 +264,66 @@ impl TIA {
             end_of_frame: false,
         };
 
+        // Clock the horizontal sync counter
         let clocked = self.ctr.clock();
+        self.pf.clock(); // TODO the PF uses the HSync counter instead of its own
 
-        let visible_cycle = self.ctr.value() >= 17 && self.ctr.value() <= 56;
-        let visible_scanline = self.scanline >= 40 && self.scanline < 232;
+        if self.visible_scanline() {
+            if self.visible_cycle() {
+                // Player, missile, and ball counters only get clocked on visible cycles
+                self.bl.tick_visible();
+                self.m0.tick_visible();
 
-        if visible_scanline {
-            if visible_cycle {
                 let x = self.ctr.internal_value as usize - 68;
                 let y = self.scanline as usize - 40;
                 let color = self.get_pixel_color(x) as usize;
                 self.pixels[y][x] = NTSC_PALETTE[color];
-                self.bl.tick_visible();
             } else {
-                //self.bl.tick_hblank();
+                self.bl.tick_hblank();
             }
         }
 
-        // If we've reset the counter back to 0, we've finished the scanline and started a new
-        // scanline.
-        if clocked && self.ctr.value() == 0 {
-            // Simply writing to the WSYNC causes the microprocessor to halt until the electron
-            // beam reaches the right edge of the screen.
-            self.wsync = false;
+        if clocked {
+            match self.ctr.value() {
+                // If we've reset the counter back to 0, we've finished the scanline and started
+                // a new scanline, in HBlank.
+                0 => {
+                    // If we hit the last scanline, we have to wait for the programmer to signal
+                    // a VSYNC to reset the gun.
+                    if self.scanline < 262 {
+                        self.scanline += 1;
+                    }
 
-            // If we hit the last scanline, we have to wait for the programmer to signal a
-            // VSYNC to reset the gun.
-            if self.scanline < 262 {
-                self.scanline += 1;
-            }
+                    if self.scanline == 3 {
+                        // VBlank started
+                        rv.end_of_frame = true;
+                    }
 
-            if self.scanline == 3 {
-                // VBlank started
-                rv.end_of_frame = true;
+                    // Simply writing to the WSYNC causes the microprocessor to halt until the
+                    // electron beam reaches the right edge of the screen.
+                    self.wsync = false;
+
+                    if self.late_reset_hblank {
+                        //debug!("LRHB: scanline {}, dot {} RESET", self.scanline, self.ctr.internal_value);
+                    }
+                    self.late_reset_hblank = false;
+                },
+
+                // Reset HBlank
+                16 => {
+                    if !self.late_reset_hblank {
+                        //debug!("RHB: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
+                    }
+                },
+
+                // Late Reset HBlank
+                18 => {
+                    if self.late_reset_hblank {
+                        //debug!("LRHB: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
+                    }
+                },
+
+                _ => { },
             }
         }
 
@@ -311,7 +349,8 @@ impl Bus for TIA {
                 self.vsync = (val & 0x02) != 0;
 
                 if self.vsync {
-                    self.ctr.internal_value = 0;
+                    self.ctr.reset();
+                    self.pf.reset();
                     self.scanline = 0;
                 }
             },
@@ -378,13 +417,15 @@ impl Bus for TIA {
             // NUSIZ0  ..111111  number-size player-missile 0
             0x0004 => {
                 // TODO the other flags
-                self.m0_size = match (val & 0b0011_0000) >> 4 {
+                let size = match (val & 0b0011_0000) >> 4 {
                     0 => 1,
                     1 => 2,
                     2 => 4,
                     3 => 8,
                     _ => unreachable!(),
                 };
+
+                self.m0.set_size(size);
             },
 
             // NUSIZ1  ..111111  number-size player-missile 1
@@ -429,11 +470,8 @@ impl Bus for TIA {
 
             // RESM0   <strobe>  reset missile 0
             0x0012 => {
-                self.m0_x = if self.in_hblank() {
-                    2
-                } else {
-                    self.ctr.internal_value as usize - 68
-                };
+                debug!("RESM0 {}", self.ctr.internal_value);
+                self.m0.reset();
             },
 
             // RESM1   <strobe>  reset missile 1
@@ -455,7 +493,7 @@ impl Bus for TIA {
             0x001c => { self.grp1 = val },
 
             // ENAM0   ......1.  graphics (enable) missile 0
-            0x001d => { self.enam0 = (val & 0x02) != 0 },
+            0x001d => { self.m0.set_enabled((val & 0x02) != 0) },
 
             // ENAM1   ......1.  graphics (enable) missile 1
             0x001e => { self.enam1 = (val & 0x02) != 0 },
@@ -474,7 +512,7 @@ impl Bus for TIA {
             0x0021 => { self.hmp1 = hmove_value(val >> 4) as usize },
 
             // HMM0    1111....  horizontal motion missile 0
-            0x0022 => { self.hmm0 = hmove_value(val >> 4) as usize },
+            0x0022 => { self.m0.set_hmove_value(val) },
 
             // HMM1    1111....  horizontal motion missile 1
             0x0023 => { self.hmm1 = hmove_value(val >> 4) as usize },
@@ -494,16 +532,8 @@ impl Bus for TIA {
             // RESMP0  ......1.  reset missile 0 to player 0
             0x0028 => {
                 if (val & 0x02) != 0 {
-                    // The centering offset is +3 for normal, +6 for double, and
-                    // +10 quad sized player.
-                    let offset = match self.m0_size {
-                        1 => 3,
-                        2 => 6,
-                        4 => 10,
-                        8 => 15, // TODO can't find this offset
-                        _ => unreachable!(),
-                    };
-                    self.m0_x = self.p0_x + offset;
+                    //self.m0.reset_to_player(self.p0);
+                    self.m0.reset_to_player();
                 }
             },
 
@@ -527,11 +557,13 @@ impl Bus for TIA {
             0x002a => {
                 self.p0_x = (self.p0_x + self.hmp0) % 160;
                 self.p1_x = (self.p1_x + self.hmp1) % 160;
-                self.m0_x = (self.m0_x + self.hmm0) % 160;
                 self.m1_x = (self.m1_x + self.hmm1) % 160;
 
                 //self.bl_x = (self.bl_x + self.hmbl) % 160;
                 self.bl.start_hmove();
+                self.m0.start_hmove();
+
+                debug!("HMOVE: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
 
                 self.late_reset_hblank = 8;
             },
@@ -540,9 +572,9 @@ impl Bus for TIA {
             0x002b => {
                 self.hmp0 = 0;
                 self.hmp1 = 0;
-                self.hmm0 = 0;
                 self.hmm1 = 0;
                 self.bl.hmclr();
+                self.m0.hmclr();
             },
 
             //

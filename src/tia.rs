@@ -26,7 +26,7 @@ pub struct TIA {
     // Vertical sync
     vsync: bool,
     vblank: bool,
-    late_reset_hblank: usize,
+    late_reset_hblank: bool,
 
     // Horizontal sync
     wsync: bool,
@@ -90,7 +90,7 @@ impl TIA {
             vsync: false,
             vblank: false,
             wsync: false,
-            late_reset_hblank: 0,
+            late_reset_hblank: false,
 
             colors: colors,
             pf: pf,
@@ -536,13 +536,12 @@ impl Bus for TIA {
                 self.p1_x = (self.p1_x + self.hmp1) % 160;
                 self.m1_x = (self.m1_x + self.hmm1) % 160;
 
-                //self.bl_x = (self.bl_x + self.hmbl) % 160;
                 self.bl.start_hmove();
                 self.m0.start_hmove();
 
                 debug!("HMOVE: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
 
-                self.late_reset_hblank = 8;
+                self.late_reset_hblank = true;
             },
 
             // HMCLR   <strobe>  clear horizontal motion registers

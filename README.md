@@ -16,11 +16,12 @@ The goal of this is to be able to play a couple of key games that have sentiment
 8. ~~Ball graphics~~
 9. ~~Player graphics~~
 10. Horizontal positioning
-11. Vertical delay
-12. Collision flags
-13. Better frame timing
-14. ...
-15. RIOT chip (MOS 6532) for peripherals
-16. Audio
-17. ..
-18. Adventure time!
+11. Graphics delay on LRHB
+12. Vertical delay
+13. Collision flags
+14. Better frame timing
+15. ...
+16. RIOT chip (MOS 6532) for peripherals
+17. Audio
+18. ..
+19. Adventure time!

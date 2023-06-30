@@ -6,7 +6,7 @@ use crate::tia::counter::Counter;
 
 pub struct Playfield {
     colors: Rc<RefCell<Colors>>,
-    ctr: Counter,
+    ctr: Rc<RefCell<Counter>>,
 
     // 20-bit playfield
     // .... | .... .... | .... ....
@@ -22,10 +22,10 @@ pub struct Playfield {
 }
 
 impl Playfield {
-    pub fn new_playfield(colors: Rc<RefCell<Colors>>) -> Self {
+    pub fn new_playfield(colors: Rc<RefCell<Colors>>, ctr: Rc<RefCell<Counter>>) -> Self {
         Self {
             colors: colors,
-            ctr: Counter::new_counter(57, 0),
+            ctr: ctr,
 
             pf0: 0,
             pf1: 0,
@@ -36,10 +36,6 @@ impl Playfield {
             score_mode: false,
             priority: false,
         }
-    }
-
-    pub fn reset(&mut self) {
-        self.ctr.reset();
     }
 
     pub fn set_pf0(&mut self, val: u8) {
@@ -80,7 +76,7 @@ impl Playfield {
     pub fn priority(&self) -> bool { self.priority }
 
     pub fn get_color(&self) -> Option<u8> {
-        let ctr = self.ctr.value();
+        let ctr = self.ctr.borrow().value();
 
         if ctr <= 16 {
             return None;
@@ -119,9 +115,5 @@ impl Playfield {
         }
 
         return None;
-    }
-
-    pub fn clock(&mut self) {
-        self.ctr.clock();
     }
 }

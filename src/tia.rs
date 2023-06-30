@@ -49,7 +49,7 @@ const SHB: u8 = 56;
 pub struct TIA {
     scanline: u16,
 
-    ctr: Counter,
+    ctr: Rc<RefCell<Counter>>,
 
     // Vertical sync
     vsync: bool,
@@ -90,7 +90,8 @@ pub struct StepResult {
 impl TIA {
     pub fn new_tia() -> Self {
         let colors = Rc::new(RefCell::new(Colors::new_colors()));
-        let pf = Playfield::new_playfield(colors.clone());
+        let hsync_ctr = Rc::new(RefCell::new(Counter::new_counter(57, 0)));
+        let pf = Playfield::new_playfield(colors.clone(), hsync_ctr.clone());
         let bl = Ball::new_ball(colors.clone());
         let m0 = Missile::new_missile(colors.clone(), PlayerType::Player0);
         let m1 = Missile::new_missile(colors.clone(), PlayerType::Player1);
@@ -99,8 +100,7 @@ impl TIA {
         Self {
             scanline: 0,
 
-            // The horizontal sync counter has a period of 57
-            ctr: Counter::new_counter(57, 0),
+            ctr: hsync_ctr,
 
             vsync: false,
             vblank: false,
@@ -191,7 +191,7 @@ impl TIA {
     }
 
     fn visible_cycle(&self) -> bool {
-        self.ctr.value() > RHB && self.ctr.value() <= SHB
+        self.ctr.borrow().value() > RHB && self.ctr.borrow().value() <= SHB
     }
 
     fn render_cycle(&self) -> bool {
@@ -201,7 +201,7 @@ impl TIA {
             RHB
         };
 
-        self.ctr.value() > hblank_ctr_value && self.ctr.value() <= SHB
+        self.ctr.borrow().value() > hblank_ctr_value && self.ctr.borrow().value() <= SHB
     }
 
     fn visible_scanline(&self) -> bool { self.scanline >= 40 && self.scanline < 232 }
@@ -224,8 +224,7 @@ impl TIA {
         };
 
         // Clock the horizontal sync counter
-        let clocked = self.ctr.clock();
-        self.pf.clock(); // TODO the PF uses the HSync counter instead of its own
+        let clocked = self.ctr.borrow_mut().clock();
 
         if self.visible_scanline() {
             if self.visible_cycle() {
@@ -236,7 +235,7 @@ impl TIA {
                 self.p0.tick_visible();
 
                 if self.render_cycle() {
-                    let x = self.ctr.internal_value as usize - 68;
+                    let x = self.ctr.borrow().internal_value as usize - 68;
                     let y = self.scanline as usize - 40;
                     let color = self.get_pixel_color(x) as usize;
                     self.pixels[y][x] = NTSC_PALETTE[color];
@@ -247,7 +246,7 @@ impl TIA {
         }
 
         if clocked {
-            match self.ctr.value() {
+            match self.ctr.borrow().value() {
                 // If we've reset the counter back to 0, we've finished the scanline and started
                 // a new scanline, in HBlank.
                 0 => {
@@ -312,8 +311,7 @@ impl Bus for TIA {
                 self.vsync = (val & 0x02) != 0;
 
                 if self.vsync {
-                    self.ctr.reset();
-                    self.pf.reset();
+                    self.ctr.borrow_mut().reset();
                     self.scanline = 0;
                 }
             },
@@ -425,27 +423,18 @@ impl Bus for TIA {
                 self.p1_x = if self.in_hblank() {
                     3
                 } else {
-                    self.ctr.internal_value as usize - 68
+                    self.ctr.borrow().internal_value as usize - 68
                 };
             },
 
             // RESM0   <strobe>  reset missile 0
-            0x0012 => {
-                debug!("RESM0 {}", self.ctr.internal_value);
-                self.m0.reset();
-            },
+            0x0012 => { self.m0.reset() },
 
             // RESM1   <strobe>  reset missile 1
-            0x0013 => {
-                debug!("RESM1 {}", self.ctr.internal_value);
-                self.m1.reset();
-            },
+            0x0013 => { self.m1.reset() },
 
             // RESBL   <strobe>  reset ball
-            0x0014 => {
-                debug!("RESBL {}", self.ctr.internal_value);
-                self.bl.reset()
-            },
+            0x0014 => { self.bl.reset() },
 
             // GRP0    11111111  graphics player 0
             0x001b => { self.p0.set_graphic(val) },
@@ -515,7 +504,7 @@ impl Bus for TIA {
                 self.m1.start_hmove();
                 self.p0.start_hmove();
 
-                debug!("HMOVE: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
+                debug!("HMOVE: scanline {}, dot {}", self.scanline, self.ctr.borrow().internal_value);
 
                 self.late_reset_hblank = true;
             },

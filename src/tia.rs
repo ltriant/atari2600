@@ -461,7 +461,10 @@ impl Bus for TIA {
             },
 
             // RESBL   <strobe>  reset ball
-            0x0014 => { self.bl.reset() },
+            0x0014 => {
+                debug!("RESBL {}", self.ctr.internal_value);
+                self.bl.reset()
+            },
 
             // GRP0    11111111  graphics player 0
             0x001b => { self.grp0 = val },
@@ -495,7 +498,7 @@ impl Bus for TIA {
             0x0023 => { self.hmm1 = hmove_value(val >> 4) as usize },
 
             // HMBL    1111....  horizontal motion ball
-            0x0024 => { self.bl.set_hmove_value(val >> 4) },
+            0x0024 => { self.bl.set_hmove_value(val) },
 
             // VDELP0  .......1  vertical delay player 0
             0x0025 => { debug!("VDELP0 {}", val & 0x01); }

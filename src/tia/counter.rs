@@ -7,13 +7,8 @@ pub struct Counter {
     clocks_to_add: u8,
 }
 
-fn hmove_value(v: u8) -> u8 {
-    // Signed Motion Value (-8..-1=Right, 0=No motion, +1..+7=Left)
-    if v < 8 {
-        v + 8
-    } else {
-        v - 8
-    }
+fn hmove_value(v: u8) -> i8 {
+    -1 * ((v & 0xf0) as i8 / 16)
 }
 
 impl Counter {
@@ -53,7 +48,7 @@ impl Counter {
     }
 
     pub fn start_hmove(&mut self, hm_val: u8) {
-        self.clocks_to_add = hmove_value(hm_val);
+        self.clocks_to_add = hmove_value(hm_val) as u8;
         if hm_val != 0 {
             debug!("adding clocks: {} ({})", self.clocks_to_add, hm_val >> 4);
         }

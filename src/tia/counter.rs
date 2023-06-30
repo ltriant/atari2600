@@ -115,4 +115,39 @@ mod tests {
         assert!(clocked);
         assert_eq!(ctr.value(), 0);
     }
+
+    fn test_hmove_value() {
+        // https://www.randomterrain.com/atari-2600-memories-tutorial-andrew-davie-22b.html
+        assert_eq!(hmove_value(0b0000_0111), 7);
+        assert_eq!(hmove_value(0b0000_0110), 6);
+        assert_eq!(hmove_value(0b0000_0101), 5);
+        assert_eq!(hmove_value(0b0000_0100), 4);
+        assert_eq!(hmove_value(0b0000_0011), 3);
+        assert_eq!(hmove_value(0b0000_0010), 2);
+        assert_eq!(hmove_value(0b0000_0001), 1);
+        assert_eq!(hmove_value(0b0000_0000), 0);
+        assert_eq!(hmove_value(0b0000_1111), -1);
+        assert_eq!(hmove_value(0b0000_1110), -2);
+        assert_eq!(hmove_value(0b0000_1101), -3);
+        assert_eq!(hmove_value(0b0000_1100), -4);
+        assert_eq!(hmove_value(0b0000_1011), -5);
+        assert_eq!(hmove_value(0b0000_1010), -6);
+        assert_eq!(hmove_value(0b0000_1001), -7);
+        assert_eq!(hmove_value(0b0000_1000), -8);
+    }
+
+    #[test]
+    fn test_scanline_counting() {
+        // p0, p0, m0, and m1 use a 40 clock counter, so they should reset back to 0 after a full
+        // scanline has finished rendering.
+        let mut ctr = Counter::new_counter(40, 0);
+
+        assert_eq!(ctr.value(), 0);
+
+        for _ in 0 .. 160 {
+            ctr.clock();
+        }
+
+        assert_eq!(ctr.value(), 0);
+    }
 }

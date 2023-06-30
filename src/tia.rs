@@ -85,7 +85,7 @@ impl TIA {
             scanline: 0,
 
             // The horizontal sync counter has a period of 57
-            ctr: Counter::new_counter(57),
+            ctr: Counter::new_counter(57, 0),
 
             vsync: false,
             vblank: false,
@@ -122,33 +122,10 @@ impl TIA {
 
     pub fn cpu_halt(&self) -> bool { self.wsync }
 
-    fn in_hblank(&self) -> bool {
-        self.ctr.internal_value < (68 + self.late_reset_hblank as u8)
-    }
+    #[deprecated]
+    fn in_hblank(&self) -> bool { ! self.visible_cycle() }
 
     pub fn get_pixels(&self) -> &Vec<Vec<Color>> { &self.pixels }
-
-    fn tick(&mut self) {
-        // If we hit the last scanline, we have to wait for the programmer to
-        // signal a VSYNC to reset the gun.
-        if self.scanline >= 262 {
-            return;
-        }
-
-        self.ctr.internal_value += 1;
-        if self.ctr.internal_value == 228 {
-            self.scanline += 1;
-            self.ctr.internal_value = 0;
-        }
-    }
-
-    fn get_m0_color(&self, x: usize) -> Option<u8> {
-        if x >= self.m0_x && x < self.m0_x + self.m0_size && self.enam0 {
-            Some(self.colors.borrow().colup0())
-        } else {
-            None
-        }
-    }
 
     fn get_m1_color(&self, x: usize) -> Option<u8> {
         if x >= self.m1_x && x < self.m1_x + self.m1_size && self.enam1 {
@@ -212,7 +189,7 @@ impl TIA {
                 .or(self.m0.get_color())
                 .or(self.get_p1_color(x))
                 .or(self.get_m1_color(x))
-                .or(self.pf.get_color(x))
+                .or(self.pf.get_color())
                 .or(self.bl.get_color())
                 .unwrap_or(self.colors.borrow().colubk())
         } else {

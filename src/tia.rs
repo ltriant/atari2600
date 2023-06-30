@@ -522,7 +522,7 @@ impl Bus for TIA {
                 if (val & 0x02) != 0 {
                     // The centering offset is +3 for normal, +6 for double, and
                     // +10 quad sized player.
-                    let offset = match self.m0_size {
+                    let offset = match self.m1_size {
                         1 => 3,
                         2 => 6,
                         4 => 10,

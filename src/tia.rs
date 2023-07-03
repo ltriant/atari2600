@@ -404,6 +404,24 @@ impl Bus for TIA {
             // RESBL   <strobe>  reset ball
             0x0014 => { self.bl.reset() },
 
+            // AUDV0
+            0x0015 => { debug!("AUDV0: {}", val) },
+
+            // AUDV1
+            0x0016 => { debug!("AUDV1: {}", val) },
+
+            // AUDF0
+            0x0017 => { debug!("AUDF0: {}", val) },
+
+            // AUDF1
+            0x0018 => { debug!("AUDF1: {}", val) },
+
+            // AUDC0
+            0x0019 => { debug!("AUDC0: {}", val) },
+
+            // AUDC1
+            0x001a => { debug!("AUDC1: {}", val) },
+
             // GRP0    11111111  graphics player 0
             0x001b => { self.p0.set_graphic(val) },
 
@@ -484,12 +502,6 @@ impl Bus for TIA {
                 self.p0.hmclr();
                 self.p1.hmclr();
             },
-
-            //
-            // Audio
-            //
-
-            0x0015 ..= 0x001a => { },
 
             _ => debug!("register: 0x{:04X} 0x{:02X}", address, val), 
         }

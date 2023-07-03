@@ -119,13 +119,10 @@ impl TIA {
 
     pub fn cpu_halt(&self) -> bool { self.wsync }
 
-    #[deprecated]
-    fn in_hblank(&self) -> bool { ! self.visible_cycle() }
-
     pub fn get_pixels(&self) -> &Vec<Vec<Color>> { &self.pixels }
 
     // Resolve playfield/player/missile/ball priorities and return the color to
-    // be rendered at the `x' position.
+    // be rendered.
     fn get_pixel_color(&self) -> u8 {
         if !self.pf.priority() {
             // When pixels of two or more objects overlap each other, only the
@@ -204,11 +201,11 @@ impl TIA {
         if self.visible_scanline() {
             if self.visible_cycle() {
                 // Player, missile, and ball counters only get clocked on visible cycles
-                self.bl.tick_visible();
-                self.m0.tick_visible();
-                self.m1.tick_visible();
                 self.p0.tick_visible();
                 self.p1.tick_visible();
+                self.m0.tick_visible();
+                self.m1.tick_visible();
+                self.bl.tick_visible();
 
                 if self.render_cycle() {
                     let color = self.get_pixel_color() as usize;
@@ -217,8 +214,6 @@ impl TIA {
                     let y = self.scanline as usize - 40;
                     self.pixels[y][x] = NTSC_PALETTE[color];
                 }
-            } else {
-                self.bl.tick_hblank();
             }
         }
 
@@ -302,7 +297,7 @@ impl Bus for TIA {
             0x0002 => { self.wsync = true },
 
             // RSYNC   <strobe>  reset horizontal sync counter
-            0x0003 => { },
+            0x0003 => { self.ctr.borrow_mut().reset() },
 
             //
             // Colors
@@ -331,8 +326,6 @@ impl Bus for TIA {
                     _ => unreachable!(),
                 };
                 self.bl.set_size(ball_size);
-
-                // TODO the other bits
             },
 
             //
@@ -364,7 +357,7 @@ impl Bus for TIA {
                 let player_copies = val & 0b0000_0111;
 
                 self.m0.set_size(missile_size);
-                self.p0.set_size(player_copies);
+                self.p0.set_copies(player_copies);
             },
 
             // NUSIZ1  ..111111  number-size player-missile 1
@@ -379,7 +372,7 @@ impl Bus for TIA {
                 let player_copies = val & 0b0000_0111;
 
                 self.m1.set_size(missile_size);
-                self.p1.set_size(player_copies);
+                self.p1.set_copies(player_copies);
             },
 
             // REFP0   ....1...  reflect player 0

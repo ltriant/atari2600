@@ -29,7 +29,7 @@ fn main() {
     env_logger::init();
 
     let rom_path = env::args().skip(1).next()
-        .unwrap_or(String::from("roms/kernel_01.bin"));
+        .expect("missing argument: rom file");
 
     let mut fh = File::open(rom_path).expect("unable to open rom");
 
@@ -46,7 +46,7 @@ fn main() {
     // SDL-related stuffs
     //
 
-    let width  = 160 * 4;
+    let width  = 160 * 5;
     let height = 192 * 3;
 
     let sdl_context = sdl2::init().unwrap();
@@ -113,12 +113,12 @@ fn main() {
                 for y in 0 .. 192 {
                     for x in 0 .. 160 {
                         let color  = pixels[y][x];
-                        let offset = 3*(y*pitch) + 4*(x*3);
+                        let offset = 3*(y*pitch) + 5*(x*3);
 
                         for y2 in 0 .. 3 {
                             let offset = offset + (y2 * pitch);
 
-                            for x2 in 0 .. 4 {
+                            for x2 in 0 .. 5 {
                                 let offset = offset + (x2 * 3);
 
                                 buffer[offset]   = color.r;

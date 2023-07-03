@@ -249,14 +249,14 @@ impl TIA {
                 },
 
                 // Reset HBlank
-                16 => {
+                RHB => {
                     if !self.late_reset_hblank {
                         //debug!("RHB: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
                     }
                 },
 
                 // Late Reset HBlank
-                18 => {
+                LRHB => {
                     if self.late_reset_hblank {
                         //debug!("LRHB: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
                     }

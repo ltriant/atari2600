@@ -15,7 +15,6 @@ pub struct Ball {
     bit_copies_written: usize,
     graphic_bit: Option<isize>,
     graphic_bit_value: bool,
-    graphic_delay: usize,
 }
 
 impl Ball {
@@ -31,7 +30,6 @@ impl Ball {
             bit_copies_written: 0,
             graphic_bit: None,
             graphic_bit_value: false,
-            graphic_delay: 0,
         }
     }
 
@@ -45,20 +43,9 @@ impl Ball {
         self.graphic_bit = Some(-4);
         self.bit_copies_written = 0;
         self.graphic_bit_value = false;
-        self.graphic_delay = 0;
     }
 
     pub fn tick_visible(&mut self) {
-        if self.graphic_delay == 0 {
-            self.graphic_delay = self.size;
-        } else {
-            self.graphic_delay -= 1;
-
-            if self.graphic_delay == 0 {
-                self.graphic_delay = self.size;
-            }
-        }
-
         self.tick_graphic_circuit();
         if self.ctr.clock() && self.ctr.value() == 39 {
             self.graphic_bit = Some(-4);
@@ -110,8 +97,8 @@ impl Ball {
     }
 
     pub fn get_color(&self) -> Option<u8> {
-        //if self.enabled && self.graphic_bit_value {
-        if self.enabled && self.ctr.internal_value < self.size as u8 {
+        if self.enabled && self.graphic_bit_value {
+        //if self.enabled && self.ctr.internal_value < self.size as u8 {
             return Some(self.colors.borrow().colupf());
         }
 

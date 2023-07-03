@@ -354,30 +354,32 @@ impl Bus for TIA {
 
             // NUSIZ0  ..111111  number-size player-missile 0
             0x0004 => {
-                // TODO the other flags
-                let size = match (val & 0b0011_0000) >> 4 {
+                let missile_size = match (val & 0b0011_0000) >> 4 {
                     0 => 1,
                     1 => 2,
                     2 => 4,
                     3 => 8,
                     _ => unreachable!(),
                 };
+                let player_copies = val & 0b0000_0111;
 
-                self.m0.set_size(size);
+                self.m0.set_size(missile_size);
+                self.p0.set_size(player_copies);
             },
 
             // NUSIZ1  ..111111  number-size player-missile 1
             0x0005 => {
-                // TODO the other flags
-                let size = match (val & 0b0011_0000) >> 4 {
+                let missile_size = match (val & 0b0011_0000) >> 4 {
                     0 => 1,
                     1 => 2,
                     2 => 4,
                     3 => 8,
                     _ => unreachable!(),
                 };
+                let player_copies = val & 0b0000_0111;
 
-                self.m1.set_size(size);
+                self.m1.set_size(missile_size);
+                self.p1.set_size(player_copies);
             },
 
             // REFP0   ....1...  reflect player 0

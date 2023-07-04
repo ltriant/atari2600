@@ -14,7 +14,6 @@ pub trait Bus {
 }
 
 pub struct AtariBus {
-    ram: [u8; 128],
     rom: Vec<u8>,
     tia: Rc<RefCell<TIA>>,
     pia: Rc<RefCell<PIA>>,
@@ -23,7 +22,6 @@ pub struct AtariBus {
 impl AtariBus {
     pub fn new_bus(tia: Rc<RefCell<TIA>>, pia: Rc<RefCell<PIA>>, rom: Vec<u8>) -> Self {
         Self {
-            ram: [0; 128],
             rom: rom,
             tia: tia,
             pia: pia,
@@ -38,7 +36,7 @@ impl Bus for AtariBus {
             0x0000 ..= 0x007f => self.tia.borrow_mut().read(address),
 
             // RAM
-            0x0080 ..= 0x00ff => self.ram[address as usize - 0x80],
+            0x0080 ..= 0x00ff => self.pia.borrow_mut().read(address),
 
             // PIA ports and timer
             0x0280 ..= 0x0297 => self.pia.borrow_mut().read(address),
@@ -56,7 +54,7 @@ impl Bus for AtariBus {
             0x0000 ..= 0x007f => self.tia.borrow_mut().write(address, val),
 
             // RAM
-            0x0080 ..= 0x00ff => { self.ram[address as usize - 0x80] = val },
+            0x0080 ..= 0x00ff => self.pia.borrow_mut().write(address, val),
 
             // PIA ports and timer
             0x0280 ..= 0x0297 => self.pia.borrow_mut().write(address, val),

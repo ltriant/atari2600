@@ -3,6 +3,7 @@ use std::io;
 use std::fs::File;
 use std::rc::Rc;
 
+use crate::pia::PIA;
 use crate::tia::TIA;
 
 pub trait Bus {
@@ -16,14 +17,16 @@ pub struct AtariBus {
     ram: [u8; 128],
     rom: Vec<u8>,
     tia: Rc<RefCell<TIA>>,
+    pia: Rc<RefCell<PIA>>,
 }
 
 impl AtariBus {
-    pub fn new_bus(tia: Rc<RefCell<TIA>>, rom: Vec<u8>) -> Self {
+    pub fn new_bus(tia: Rc<RefCell<TIA>>, pia: Rc<RefCell<PIA>>, rom: Vec<u8>) -> Self {
         Self {
             ram: [0; 128],
             rom: rom,
             tia: tia,
+            pia: pia,
         }
     }
 }
@@ -37,9 +40,8 @@ impl Bus for AtariBus {
             // RAM
             0x0080 ..= 0x00ff => self.ram[address as usize - 0x80],
 
-            // RIOT registers
-            0x0282 => 0b0000_1000,
-            0x0200 ..= 0x02ff => 0,
+            // PIA ports and timer
+            0x0280 ..= 0x0297 => self.pia.borrow_mut().read(address),
 
             // Cartridge ROM
             0x1000 ..= 0x1fff => self.rom[address as usize & 0xfff],
@@ -56,8 +58,8 @@ impl Bus for AtariBus {
             // RAM
             0x0080 ..= 0x00ff => { self.ram[address as usize - 0x80] = val },
 
-            // RIOT registers
-            0x0200 ..= 0x02ff => { },
+            // PIA ports and timer
+            0x0280 ..= 0x0297 => self.pia.borrow_mut().write(address, val),
 
             _ => { },
         }

@@ -3,6 +3,7 @@
 
 mod bus;
 mod cpu6507;
+mod pia;
 mod tia;
 
 use std::cell::RefCell;
@@ -15,6 +16,7 @@ use std::time::{Duration, Instant};
 
 use crate::bus::AtariBus;
 use crate::cpu6507::CPU6507;
+use crate::pia::PIA;
 use crate::tia::TIA;
 
 use sdl2::pixels::Color;
@@ -37,8 +39,9 @@ fn main() {
     let bytes = fh.read_to_end(&mut rom).expect("unable to read rom data");
     info!("read {} bytes of ROM data", bytes);
 
+    let pia = Rc::new(RefCell::new(PIA::new_pia()));
     let tia = Rc::new(RefCell::new(TIA::new_tia()));
-    let bus = AtariBus::new_bus(tia.clone(), rom);
+    let bus = AtariBus::new_bus(tia.clone(), pia.clone(), rom);
     let mut cpu = CPU6507::new_cpu(Box::new(bus));
     cpu.reset();
 

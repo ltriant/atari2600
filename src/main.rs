@@ -3,7 +3,7 @@
 
 mod bus;
 mod cpu6507;
-mod pia;
+mod riot;
 mod tia;
 
 use std::cell::RefCell;
@@ -16,12 +16,13 @@ use std::time::{Duration, Instant};
 
 use crate::bus::AtariBus;
 use crate::cpu6507::CPU6507;
-use crate::pia::PIA;
+use crate::riot::RIOT;
 use crate::tia::TIA;
 
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
 use sdl2::pixels::Color;
 use sdl2::pixels::PixelFormatEnum;
-use sdl2::event::Event;
 use sdl2::rect::Rect;
 
 const ATARI_FPS: f64 = 60.0;
@@ -39,9 +40,9 @@ fn main() {
     let bytes = fh.read_to_end(&mut rom).expect("unable to read rom data");
     info!("read {} bytes of ROM data", bytes);
 
-    let pia = Rc::new(RefCell::new(PIA::new_pia()));
+    let riot = Rc::new(RefCell::new(RIOT::new_riot()));
     let tia = Rc::new(RefCell::new(TIA::new_tia()));
-    let bus = AtariBus::new_bus(tia.clone(), pia.clone(), rom);
+    let bus = AtariBus::new_bus(tia.clone(), riot.clone(), rom);
     let mut cpu = CPU6507::new_cpu(Box::new(bus));
     cpu.reset();
 
@@ -81,17 +82,25 @@ fn main() {
     let mut fps_start = Instant::now();
 
     'running: loop {
-        let tia_cycles = if tia.borrow().cpu_halt() {
-            1
-        } else {
-            3 * cpu.clock()
-        };
-
-        for _ in 0 .. tia_cycles {
+        if tia.borrow().cpu_halt() {
             let rv = tia.borrow_mut().clock();
 
             if rv.end_of_frame {
                 end_of_frame = true;
+            }
+        } else {
+            let cpu_cycles = cpu.clock();
+
+            for _ in 0 .. cpu_cycles * 3 {
+                let rv = tia.borrow_mut().clock();
+
+                if rv.end_of_frame {
+                    end_of_frame = true;
+                }
+            }
+
+            for _ in 0 .. cpu_cycles {
+                riot.borrow_mut().clock();
             }
         }
 
@@ -99,6 +108,35 @@ fn main() {
             for event in event_pump.poll_iter() {
                 match event {
                     Event::Quit { .. } => { break 'running },
+                    Event::KeyDown { keycode: Some(key), .. } => {
+                        match key {
+                            Keycode::W => riot.borrow_mut().up(true),
+                            Keycode::A => riot.borrow_mut().left(true),
+                            Keycode::S => riot.borrow_mut().down(true),
+                            Keycode::D => riot.borrow_mut().right(true),
+                            Keycode::N => tia.borrow_mut().inpt4(true),
+
+                            Keycode::F1 => riot.borrow_mut().select(true),
+                            Keycode::F2 => riot.borrow_mut().reset(true),
+                            Keycode::F3 => riot.borrow_mut().color(),
+
+                            _ => {},
+                        }
+                    },
+                    Event::KeyUp { keycode: Some(key), .. } => {
+                        match key {
+                            Keycode::W => riot.borrow_mut().up(false),
+                            Keycode::A => riot.borrow_mut().left(false),
+                            Keycode::S => riot.borrow_mut().down(false),
+                            Keycode::D => riot.borrow_mut().right(false),
+                            Keycode::N => tia.borrow_mut().inpt4(false),
+
+                            Keycode::F1 => riot.borrow_mut().select(false),
+                            Keycode::F2 => riot.borrow_mut().reset(false),
+
+                            _ => {},
+                        }
+                    },
                     _ => { },
                 }
             }

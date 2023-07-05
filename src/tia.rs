@@ -53,7 +53,7 @@ pub struct TIA {
 
     // Vertical sync
     vsync: bool,
-    vblank: bool,
+    vblank: u8,
     late_reset_hblank: bool,
 
     // Horizontal sync
@@ -101,7 +101,7 @@ impl TIA {
             ctr: hsync_ctr,
 
             vsync: false,
-            vblank: false,
+            vblank: 0,
             wsync: false,
             late_reset_hblank: false,
 
@@ -120,6 +120,15 @@ impl TIA {
     pub fn cpu_halt(&self) -> bool { self.wsync }
 
     pub fn get_pixels(&self) -> &Vec<Vec<Color>> { &self.pixels }
+
+    pub fn inpt4(&mut self, pressed: bool) {
+        // 0=Pressed, 1=Not pressed
+        if pressed {
+            self.vblank &= 0b0111_1111;
+        } else {
+            self.vblank |= 0b1000_0000;
+        }
+    }
 
     // Resolve playfield/player/missile/ball priorities and return the color to
     // be rendered.
@@ -269,7 +278,23 @@ impl Bus for TIA {
     // https://problemkaputt.de/2k6specs.htm#memoryandiomap
 
     fn read(&mut self, address: u16) -> u8 {
-        0
+        match address {
+            // VBLANK
+            0x0001 => self.vblank,
+
+            // INPT4   1.......  read input
+            // INPT5   1.......  read input
+            0x003C | 0x003D => {
+                // D6 of VBLANK specifies latched input for INPT4 and 5
+                if (self.vblank & 0b0100_0000) != 0 {
+                    0x80
+                } else {
+                    0x00
+                }
+            },
+
+            _ => 0,
+        }
     }
 
     fn write(&mut self, address: u16, val: u8) {
@@ -289,9 +314,7 @@ impl Bus for TIA {
             },
 
             // VBLANK  11....1.  vertical blank set-clear
-            0x0001 => {
-                self.vblank = (val & 0x02) != 0;
-            },
+            0x0001 => { self.vblank = val },
 
             // WSYNC   <strobe>  wait for leading edge of horizontal blank
             0x0002 => { self.wsync = true },

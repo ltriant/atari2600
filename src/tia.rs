@@ -61,6 +61,11 @@ pub struct TIA {
     // Horizontal sync
     wsync: bool,
 
+    // Input
+    // I'm only implementing player 0 joystick controls, so only one input port
+    inpt4_port: bool,
+    inpt4_latch: bool,
+
     colors: Rc<RefCell<Colors>>,
 
     // Graphics
@@ -97,10 +102,15 @@ impl TIA {
 
             vsync: false,
             vblank: 0,
-            wsync: false,
             late_reset_hblank: false,
 
+            wsync: false,
+
+            inpt4_port: false,
+            inpt4_latch: true,
+
             colors: colors,
+
             pf: pf,
             bl: bl,
             m0: m0,
@@ -116,12 +126,12 @@ impl TIA {
 
     pub fn get_pixels(&self) -> &Vec<Vec<Color>> { &self.pixels }
 
-    pub fn inpt4(&mut self, pressed: bool) {
-        // 0=Pressed, 1=Not pressed
+    pub fn joystick_fire(&mut self, pressed: bool) {
+        self.inpt4_port = !pressed;
+
         if pressed {
-            self.vblank &= 0b0111_1111;
-        } else {
-            self.vblank |= 0b1000_0000;
+            debug!("INPT4 pressed");
+            self.inpt4_latch = false;
         }
     }
 
@@ -311,7 +321,14 @@ impl Bus for TIA {
             },
 
             // VBLANK  11....1.  vertical blank set-clear
-            0x0001 => { self.vblank = val },
+            0x0001 => {
+                self.vblank = val;
+
+                if (val & 0x80) != 0 {
+                    debug!("INPT4 latch reset");
+                    self.inpt4_latch = true;
+                }
+            },
 
             // WSYNC   <strobe>  wait for leading edge of horizontal blank
             0x0002 => { self.wsync = true },

@@ -47,8 +47,10 @@ const CNT: u8 = 36;
 const SHB: u8 = 56;
 
 pub struct TIA {
+    // The scanline we're currently processing
     scanline: u16,
 
+    // HSYNC counter
     ctr: Rc<RefCell<Counter>>,
 
     // Vertical sync
@@ -60,23 +62,16 @@ pub struct TIA {
     wsync: bool,
 
     colors: Rc<RefCell<Colors>>,
+
+    // Graphics
     pf: Playfield,
-
-    // Player 0
     p0: Player,
-
-    // Player 1
     p1: Player,
-
-    // Missile 0
     m0: Missile,
-
-    // Missile 1
     m1: Missile,
-
-    // Ball
     bl: Ball,
 
+    // Pixels to be rendered
     pixels: Vec<Vec<Color>>,
 }
 
@@ -216,13 +211,15 @@ impl TIA {
                 self.m1.tick_visible();
                 self.bl.tick_visible();
 
-                if self.render_cycle() {
-                    let color = self.get_pixel_color() as usize;
+                let color = if self.render_cycle() {
+                    self.get_pixel_color() as usize
+                } else {
+                    0 // default black
+                };
 
-                    let x = self.ctr.borrow().internal_value as usize - 68;
-                    let y = self.scanline as usize - 40;
-                    self.pixels[y][x] = NTSC_PALETTE[color];
-                }
+                let x = self.ctr.borrow().internal_value as usize - 68;
+                let y = self.scanline as usize - 40;
+                self.pixels[y][x] = NTSC_PALETTE[color];
             }
         }
 

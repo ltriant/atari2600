@@ -66,6 +66,16 @@ pub struct TIA {
     inpt4_port: bool,
     inpt4_latch: bool,
 
+    // Collision registers
+    cxm0p: u8,
+    cxm1p: u8,
+    cxp0fb: u8,
+    cxp1fb: u8,
+    cxm0fb: u8,
+    cxm1fb: u8,
+    cxblpf: u8,
+    cxppmm: u8,
+
     colors: Rc<RefCell<Colors>>,
 
     // Graphics
@@ -108,6 +118,15 @@ impl TIA {
 
             inpt4_port: false,
             inpt4_latch: true,
+
+            cxm0p: 0,
+            cxm1p: 0,
+            cxp0fb: 0,
+            cxp1fb: 0,
+            cxm0fb: 0,
+            cxm1fb: 0,
+            cxblpf: 0,
+            cxppmm: 0,
 
             colors: colors,
 
@@ -176,6 +195,31 @@ impl TIA {
         }
     }
 
+    fn update_collisions(&mut self) {
+        if self.m0.get_color().is_some() && self.p0.get_color().is_some() { self.cxm0p |= 0x40 }
+        if self.m0.get_color().is_some() && self.p1.get_color().is_some() { self.cxm0p |= 0x80 }
+
+        if self.m1.get_color().is_some() && self.p0.get_color().is_some() { self.cxm1p |= 0x40 }
+        if self.m1.get_color().is_some() && self.p1.get_color().is_some() { self.cxm1p |= 0x80 }
+
+        if self.p0.get_color().is_some() && self.bl.get_color().is_some() { self.cxp0fb |= 0x40 }
+        if self.p0.get_color().is_some() && self.pf.get_color().is_some() { self.cxp0fb |= 0x80 }
+
+        if self.p1.get_color().is_some() && self.bl.get_color().is_some() { self.cxp1fb |= 0x40 }
+        if self.p1.get_color().is_some() && self.pf.get_color().is_some() { self.cxp1fb |= 0x80 }
+
+        if self.m0.get_color().is_some() && self.bl.get_color().is_some() { self.cxm0fb |= 0x40 }
+        if self.m0.get_color().is_some() && self.pf.get_color().is_some() { self.cxm0fb |= 0x80 }
+
+        if self.m1.get_color().is_some() && self.bl.get_color().is_some() { self.cxm0fb |= 0x40 }
+        if self.m1.get_color().is_some() && self.pf.get_color().is_some() { self.cxm0fb |= 0x80 }
+
+        if self.bl.get_color().is_some() && self.pf.get_color().is_some() { self.cxblpf |= 0x80 }
+
+        if self.m0.get_color().is_some() && self.m1.get_color().is_some() { self.cxppmm |= 0x40 }
+        if self.p0.get_color().is_some() && self.p1.get_color().is_some() { self.cxppmm |= 0x80 }
+    }
+
     fn visible_cycle(&self) -> bool {
         self.ctr.borrow().value() > RHB && self.ctr.borrow().value() <= SHB
     }
@@ -214,6 +258,9 @@ impl TIA {
 
         if self.visible_scanline() {
             if self.visible_cycle() {
+                // Update the collision registers
+                self.update_collisions();
+
                 // Player, missile, and ball counters only get clocked on visible cycles
                 self.p0.tick_visible();
                 self.p1.tick_visible();
@@ -286,8 +333,29 @@ impl Bus for TIA {
 
     fn read(&mut self, address: u16) -> u8 {
         match address {
-            // VBLANK
-            0x0001 => self.vblank,
+            // CXM0P   11......  read collision M0-P1, M0-P0 (Bit 7,6)
+            0x0030 => self.cxm0p,
+
+            // CXM1P   11......  read collision M1-P0, M1-P1
+            0x0031 => self.cxm1p,
+
+            // CXP0FB  11......  read collision P0-PF, P0-BL
+            0x0032 => self.cxp0fb,
+
+            // CXP1FB  11......  read collision P1-PF, P1-BL
+            0x0033 => self.cxp1fb,
+
+            // CXM0FB  11......  read collision M0-PF, M0-BL
+            0x0034 => self.cxm0fb,
+
+            // CXM1FB  11......  read collision M1-PF, M1-BL
+            0x0035 => self.cxm1fb,
+
+            // CXBLPF  1.......  read collision BL-PF, unused
+            0x0036 => self.cxblpf,
+
+            // CXPPMM  11......  read collision P0-P1, M0-M1
+            0x0037 => self.cxppmm,
 
             // INPT4   1.......  read input
             0x003C => {
@@ -540,6 +608,18 @@ impl Bus for TIA {
                 self.m1.hmclr();
                 self.p0.hmclr();
                 self.p1.hmclr();
+            },
+
+            // CXCLR   <strobe>  clear collision latches
+            0x002C => {
+                self.cxm0p = 0;
+                self.cxm1p = 0;
+                self.cxp0fb = 0;
+                self.cxp1fb = 0;
+                self.cxm0fb = 0;
+                self.cxm1fb = 0;
+                self.cxblpf = 0;
+                self.cxppmm = 0;
             },
 
             _ => debug!("register: 0x{:04X} 0x{:02X}", address, val), 

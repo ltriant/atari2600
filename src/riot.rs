@@ -22,6 +22,10 @@ pub struct RIOT {
 
 impl RIOT {
     pub fn new_riot() -> Self {
+        // Initialise port B with the P0 and P1 difficulty bits set to 1. Should probably make this
+        // switchable in the interface.
+        let port_b = 0b1100_0000;
+
         Self {
             ram: [0; 128],
 
@@ -33,7 +37,7 @@ impl RIOT {
             instat: 0,
 
             port_a: 0,
-            port_b: 0,
+            port_b: port_b,
             resolution: 0,
             cycle_count: 0,
         }

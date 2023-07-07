@@ -290,14 +290,16 @@ impl Bus for TIA {
             0x0001 => self.vblank,
 
             // INPT4   1.......  read input
-            // INPT5   1.......  read input
-            0x003C | 0x003D => {
-                // D6 of VBLANK specifies latched input for INPT4 and 5
-                if (self.vblank & 0b0100_0000) != 0 {
-                    0x80
-                } else {
-                    0x00
+            0x003C => {
+                // Check the logic level of the port
+                let mut level = self.inpt4_port;
+
+                // When the latch is enabled in D6 of VBLANK, check the latch value aswell
+                if (self.vblank & 0x40) != 0 {
+                    level = level && self.inpt4_latch;
                 }
+
+                if level { 0x80 } else { 0x00 }
             },
 
             _ => 0,

@@ -114,7 +114,7 @@ fn main() {
                             Keycode::A => riot.borrow_mut().left(true),
                             Keycode::S => riot.borrow_mut().down(true),
                             Keycode::D => riot.borrow_mut().right(true),
-                            Keycode::N => tia.borrow_mut().inpt4(true),
+                            Keycode::N => tia.borrow_mut().joystick_fire(true),
 
                             Keycode::F1 => riot.borrow_mut().select(true),
                             Keycode::F2 => riot.borrow_mut().reset(true),
@@ -129,7 +129,7 @@ fn main() {
                             Keycode::A => riot.borrow_mut().left(false),
                             Keycode::S => riot.borrow_mut().down(false),
                             Keycode::D => riot.borrow_mut().right(false),
-                            Keycode::N => tia.borrow_mut().inpt4(false),
+                            Keycode::N => tia.borrow_mut().joystick_fire(false),
 
                             Keycode::F1 => riot.borrow_mut().select(false),
                             Keycode::F2 => riot.borrow_mut().reset(false),

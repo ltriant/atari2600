@@ -339,10 +339,7 @@ impl Bus for TIA {
     // https://problemkaputt.de/2k6specs.htm#memoryandiomap
 
     fn read(&mut self, address: u16) -> u8 {
-        // 0000-000D  TIA Read (sometimes mirrored at 0030-003D)
-        let mirrored_address = (address & 0x0f) | 0x30;
-
-        match mirrored_address {
+        match address {
             // CXM0P   11......  read collision M0-P1, M0-P0 (Bit 7,6)
             0x0030 => self.cxm0p,
 

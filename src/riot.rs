@@ -141,7 +141,7 @@ impl Bus for RIOT {
     fn read(&mut self, address: u16) -> u8 {
         match address {
             // RAM
-            0x0080 ..= 0x00ff => self.ram[address as usize - 0x80],
+            0x0000 ..= 0x007f => self.ram[address as usize],
 
             // SWCHA   11111111  Port A; input or output  (read or write)
             0x0280 => {
@@ -172,7 +172,7 @@ impl Bus for RIOT {
     fn write(&mut self, address: u16, val: u8) {
         match address {
             // RAM
-            0x0080 ..= 0x00ff => { self.ram[address as usize - 0x80] = val },
+            0x0000 ..= 0x007f => { self.ram[address as usize] = val },
 
             // SWACNT  11111111  Port A DDR, 0= input, 1=output
             0x0281 => { self.swacnt = val },

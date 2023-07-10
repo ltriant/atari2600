@@ -116,6 +116,10 @@ impl TIA {
 
             wsync: false,
 
+            // These two ports have latches that are both enabled by writing a "1" or disabled by
+            // writing a "0" to D6 of VBLANK. When disabled, the microprocessor reads the logic
+            // level of the port directly. When enabled, the latch is set for logic one and remains
+            // that way until its port goes LOW.
             inpt4_port: false,
             inpt4_latch: true,
 
@@ -148,11 +152,14 @@ impl TIA {
     pub fn joystick_fire(&mut self, pressed: bool) {
         self.inpt4_port = !pressed;
 
-        if pressed {
-            debug!("INPT4 pressed");
+        if !self.inpt4_port {
+            // When the port goes LOW the latch goes LOW and remains that way (until re-disabled by
+            // VBLANK Bit 6) regardless of what the port does
             self.inpt4_latch = false;
         }
     }
+
+    fn reset_latches(&mut self) { self.inpt4_latch = true }
 
     // Resolve playfield/player/missile/ball priorities and return the color to
     // be rendered.
@@ -332,7 +339,10 @@ impl Bus for TIA {
     // https://problemkaputt.de/2k6specs.htm#memoryandiomap
 
     fn read(&mut self, address: u16) -> u8 {
-        match address {
+        // 0000-000D  TIA Read (sometimes mirrored at 0030-003D)
+        let mirrored_address = (address & 0x0f) | 0x30;
+
+        match mirrored_address {
             // CXM0P   11......  read collision M0-P1, M0-P0 (Bit 7,6)
             0x0030 => self.cxm0p,
 
@@ -395,8 +405,8 @@ impl Bus for TIA {
                 self.vblank = val;
 
                 if (val & 0x80) != 0 {
-                    debug!("INPT4 latch reset");
-                    self.inpt4_latch = true;
+                    // INPT4-5 latches are reset when D6 of VBLANK is 1
+                    self.reset_latches();
                 }
             },
 

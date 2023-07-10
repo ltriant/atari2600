@@ -21,7 +21,7 @@ The goal of this is to be able to play a couple of key games that have sentiment
 13. ~~Collision flags~~
 14. Better frame timing
 15. ...
-16. RIOT chip (MOS 6532) for peripherals
+16. ~~RIOT chip (MOS 6532) for peripherals~~
 17. Audio
 18. ..
 19. Adventure time!

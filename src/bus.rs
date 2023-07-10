@@ -31,35 +31,40 @@ impl AtariBus {
 
 impl Bus for AtariBus {
     fn read(&mut self, address: u16) -> u8 {
-        match address {
-            // TIA registers
-            0x0000 ..= 0x007f => self.tia.borrow_mut().read(address),
+        // https://problemkaputt.de/2k6specs.htm#memorymirrors
 
-            // RAM
-            0x0080 ..= 0x00ff => self.riot.borrow_mut().read(address),
+        let a12 = (address & 0b0001_0000_0000_0000) != 0;
+        let a9  = (address & 0b0000_0010_0000_0000) != 0;
+        let a7  = (address & 0b0000_0000_1000_0000) != 0;
 
-            // RIOT ports and timer
-            0x0280 ..= 0x0297 => self.riot.borrow_mut().read(address),
-
-            // Cartridge ROM
-            0x1000 ..= 0x1fff => self.rom[address as usize & 0xfff],
-
-            _ => 0,
+        match (a12, a9, a7) {
+            // Cartridge memory is selected by A12=1
+            (true, _, _)         => self.rom[address as usize & 0xfff],
+            // PIA I/O is selected by A12=0, A9=1, A7=1
+            (false, true, true)  => self.riot.borrow_mut().read(address & 0x2ff),
+            // PIA RAM is selected by A12=0, A9=0, A7=1
+            (false, false, true) => self.riot.borrow_mut().read(address & 0x7f),
+            // The TIA chip is addressed by A12=0, A7=0
+            (false, _, false)    => self.tia.borrow_mut().read((address & 0x0f) | 0x30),
         }
     }
 
     fn write(&mut self, address: u16, val: u8) {
-        match address {
-            // TIA registers
-            0x0000 ..= 0x007f => self.tia.borrow_mut().write(address, val),
+        // https://problemkaputt.de/2k6specs.htm#memorymirrors
 
-            // RAM
-            0x0080 ..= 0x00ff => self.riot.borrow_mut().write(address, val),
+        let a12 = (address & 0b0001_0000_0000_0000) != 0;
+        let a9  = (address & 0b0000_0010_0000_0000) != 0;
+        let a7  = (address & 0b0000_0000_1000_0000) != 0;
 
-            // RIOT ports and timer
-            0x0280 ..= 0x0297 => self.riot.borrow_mut().write(address, val),
-
-            _ => { },
+        match (a12, a9, a7) {
+            // Cartridge memory is selected by A12=1
+            (true, _, _)         => { self.rom[address as usize & 0xfff] = val },
+            // PIA I/O is selected by A12=0, A9=1, A7=1
+            (false, true, true)  => self.riot.borrow_mut().write(address & 0x2ff, val),
+            // PIA RAM is selected by A12=0, A9=0, A7=1
+            (false, false, true) => self.riot.borrow_mut().write(address & 0x7f, val),
+            // The TIA chip is addressed by A12=0, A7=0
+            (false, _, false)    => self.tia.borrow_mut().write(address & 0x3f, val),
         }
     }
 }

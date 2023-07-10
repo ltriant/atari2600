@@ -23,8 +23,9 @@ pub struct RIOT {
 impl RIOT {
     pub fn new_riot() -> Self {
         // Initialise port B with the P0 and P1 difficulty bits set to 1. Should probably make this
-        // switchable in the interface.
-        let port_b = 0b1100_0000;
+        // switchable in the interface. We also set the color switch to color, just because that's a
+        // nicer default in 2023.
+        let port_b = 0b1100_1000;
 
         Self {
             ram: [0; 128],

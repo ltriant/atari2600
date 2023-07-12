@@ -11,6 +11,8 @@ pub struct Ball {
     size: usize,
     hmove_offset: u8,
     ctr: Counter,
+    vdel: bool,
+    old_value: bool,
 
     bit_copies_written: usize,
     graphic_bit: Option<isize>,
@@ -26,6 +28,8 @@ impl Ball {
             size: 0,
             hmove_offset: 0,
             ctr: Counter::new_counter(40, 39),
+            vdel: false,
+            old_value: false,
 
             bit_copies_written: 0,
             graphic_bit: None,
@@ -36,6 +40,8 @@ impl Ball {
     pub fn enabled(&self) -> bool { self.enabled }
     pub fn set_enabled(&mut self, v: bool) { self.enabled = v }
     pub fn set_hmove_value(&mut self, v: u8) { self.hmove_offset = v }
+    pub fn set_vdel(&mut self, v: bool) { self.vdel = v }
+    pub fn use_old_value(&mut self) { self.old_value = self.enabled }
     pub fn set_size(&mut self, size: usize) { self.size = size }
     pub fn hmclr(&mut self) { self.hmove_offset = 0 }
     pub fn reset(&mut self) {

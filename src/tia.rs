@@ -537,10 +537,17 @@ impl Bus for TIA {
             0x001a => { debug!("AUDC1: {}", val) },
 
             // GRP0    11111111  graphics player 0
-            0x001b => { self.p0.set_graphic(val) },
+            0x001b => {
+                self.p0.set_graphic(val);
+                self.p1.use_old_value();
+            },
 
             // GRP1    11111111  graphics player 1
-            0x001c => { self.p1.set_graphic(val) },
+            0x001c => {
+                self.p1.set_graphic(val);
+                self.p0.use_old_value();
+                self.bl.use_old_value();
+            },
 
             // ENAM0   ......1.  graphics (enable) missile 0
             0x001d => { self.m0.set_enabled((val & 0x02) != 0) },
@@ -571,13 +578,13 @@ impl Bus for TIA {
             0x0024 => { self.bl.set_hmove_value(val) },
 
             // VDELP0  .......1  vertical delay player 0
-            0x0025 => { debug!("VDELP0 {}", val & 0x01); }
+            0x0025 => { self.p0.set_vdel((val & 0x01) != 0) }
 
             // VDELP1  .......1  vertical delay player 1
-            0x0026 => { debug!("VDELP1 {}", val & 0x01); }
+            0x0026 => { self.p1.set_vdel((val & 0x01) != 0) }
 
             // VDELBL  .......1  vertical delay ball
-            0x0027 => { debug!("VDELBL {}", val & 0x01); }
+            0x0027 => { self.bl.set_vdel((val & 0x01) != 0) }
 
             // RESMP0  ......1.  reset missile 0 to player 0
             0x0028 => {

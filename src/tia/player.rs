@@ -20,6 +20,10 @@ pub struct Player {
     // Delay - in TIA ticks - in rendering the graphic
     graphic_delay: u8,
 
+    // VDELPx
+    vdel: bool,
+    old_value: u8,
+
     /*
      * Graphics Scan Counter
      */
@@ -42,6 +46,9 @@ impl Player {
             // Player sprites are delayed by 1 TIA tick
             graphic_delay: 5,
 
+            vdel: false,
+            old_value: 0,
+
             graphic_draw: false,
             graphic_bit_idx: 0,
         }
@@ -53,6 +60,8 @@ impl Player {
     pub fn set_graphic(&mut self, graphic: u8) { self.graphic = graphic }
     pub fn set_horizontal_mirror(&mut self, reflect: bool) { self.horizontal_mirror = reflect }
     pub fn set_copies(&mut self, v: u8) { self.copies = v }
+    pub fn set_vdel(&mut self, v: bool) { self.vdel = v }
+    pub fn use_old_value(&mut self) { self.old_value = self.graphic }
     pub fn hmclr(&mut self) { self.hmove_offset = 0 }
     pub fn reset(&mut self) {
         self.ctr.reset();
@@ -68,6 +77,10 @@ impl Player {
         // eight ticks long.
         //self.graphic_delay += 8;
         self.ctr.start_hmove(self.hmove_offset);
+    }
+
+    pub fn apply_hmove(&mut self) {
+        let (moved, counter_clocked) = self.ctr.apply_hmove(self.hmove_offset);
     }
 
     pub fn tick_visible(&mut self) {
@@ -99,13 +112,18 @@ impl Player {
             };
 
             let x = self.graphic_bit_idx;
+            let graphic = if self.vdel {
+                self.old_value
+            } else {
+                self.graphic
+            };
 
             if self.horizontal_mirror {
-                if (self.graphic & (1 << x)) != 0 {
+                if (graphic & (1 << x)) != 0 {
                     return Some(color);
                 }
             } else {
-                if (self.graphic & (1 << (7 - x))) != 0 {
+                if (graphic & (1 << (7 - x))) != 0 {
                     return Some(color);
                 }
             }

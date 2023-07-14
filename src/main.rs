@@ -86,33 +86,27 @@ fn main() {
     }
 
     let mut event_pump = sdl_context.event_pump().unwrap();
-    let mut end_of_frame = false;
+    let mut last_vblank = false;
     let mut fps_start = Instant::now();
+    let mut clock_count = 0;
 
     'running: loop {
-        if tia.borrow().cpu_halt() {
-            let rv = tia.borrow_mut().clock();
-
-            if rv.end_of_frame {
-                end_of_frame = true;
-            }
-        } else {
-            let cpu_cycles = cpu.clock();
-
-            for _ in 0 .. cpu_cycles * 3 {
-                let rv = tia.borrow_mut().clock();
-
-                if rv.end_of_frame {
-                    end_of_frame = true;
-                }
-            }
-
-            for _ in 0 .. cpu_cycles {
-                riot.borrow_mut().clock();
-            }
+        if (clock_count % 3) == 0 {
+            riot.borrow_mut().clock();
         }
 
-        if end_of_frame {
+        tia.borrow_mut().clock();
+
+        if !tia.borrow().cpu_halt() && (clock_count % 3) == 2 {
+            cpu.clock();
+        }
+
+        clock_count += 1;
+        clock_count %= 3;
+
+        let vblank = tia.borrow().vblank();
+
+        if !last_vblank && vblank {
             for event in event_pump.poll_iter() {
                 match event {
                     Event::Quit { .. } => { break 'running },
@@ -182,8 +176,8 @@ fn main() {
             canvas.clear();
             canvas.copy(&texture, None, None).unwrap();
             canvas.present();
-
-            end_of_frame = false;
         }
+
+        last_vblank = vblank;
     }
 }

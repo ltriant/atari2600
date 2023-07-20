@@ -4,11 +4,18 @@ pub struct Counter {
     pub internal_value: u8,
 
     last_value: u8,
-    clocks_to_add: u8,
+    ticks_added: u8,
+    movement_required: bool,
 }
 
-fn hmove_value(v: u8) -> i8 {
-    -1 * ((v & 0xf0) as i8 / 16)
+fn hmove_value(v: u8) -> u8 {
+    let nibble = v >> 4;
+
+    if nibble < 8 {
+        nibble + 8
+    } else {
+        nibble - 8
+    }
 }
 
 impl Counter {
@@ -19,7 +26,8 @@ impl Counter {
             internal_value: 0,
 
             last_value: 0,
-            clocks_to_add: 0,
+            ticks_added: 0,
+            movement_required: false,
         }
     }
 
@@ -48,20 +56,20 @@ impl Counter {
     }
 
     pub fn start_hmove(&mut self, hm_val: u8) {
-        self.clocks_to_add = hmove_value(hm_val) as u8;
-        if hm_val != 0 {
-            debug!("adding clocks: {} ({})", self.clocks_to_add, hm_val >> 4);
-        }
+        self.ticks_added = 0;
+        self.movement_required = hmove_value(hm_val) != 0;
     }
 
-    pub fn apply_hmove(&mut self) -> bool {
-        if self.clocks_to_add != 0 {
-            self.clocks_to_add -= 1;
-
-            return self.clocks_to_add != 0;
+    pub fn apply_hmove(&mut self, hm_val: u8) -> (bool, bool) {
+        if !self.movement_required {
+            return (false, false);
         }
 
-        return false;
+        let clocked = self.clock();
+        self.ticks_added += 1;
+        self.movement_required = self.ticks_added != hmove_value(hm_val);
+
+        return (true, clocked);
     }
 }
 
@@ -114,26 +122,6 @@ mod tests {
 
         assert!(clocked);
         assert_eq!(ctr.value(), 0);
-    }
-
-    fn test_hmove_value() {
-        // https://www.randomterrain.com/atari-2600-memories-tutorial-andrew-davie-22b.html
-        assert_eq!(hmove_value(0b0000_0111), 7);
-        assert_eq!(hmove_value(0b0000_0110), 6);
-        assert_eq!(hmove_value(0b0000_0101), 5);
-        assert_eq!(hmove_value(0b0000_0100), 4);
-        assert_eq!(hmove_value(0b0000_0011), 3);
-        assert_eq!(hmove_value(0b0000_0010), 2);
-        assert_eq!(hmove_value(0b0000_0001), 1);
-        assert_eq!(hmove_value(0b0000_0000), 0);
-        assert_eq!(hmove_value(0b0000_1111), -1);
-        assert_eq!(hmove_value(0b0000_1110), -2);
-        assert_eq!(hmove_value(0b0000_1101), -3);
-        assert_eq!(hmove_value(0b0000_1100), -4);
-        assert_eq!(hmove_value(0b0000_1011), -5);
-        assert_eq!(hmove_value(0b0000_1010), -6);
-        assert_eq!(hmove_value(0b0000_1001), -7);
-        assert_eq!(hmove_value(0b0000_1000), -8);
     }
 
     #[test]

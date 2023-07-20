@@ -14,7 +14,7 @@ use crate::tia::ball::Ball;
 use crate::tia::color::Colors;
 use crate::tia::counter::Counter;
 use crate::tia::missile::Missile;
-use crate::tia::palette::NTSC_PALETTE;
+use crate::tia::palette::{DEFAULT_COLOR, NTSC_PALETTE};
 use crate::tia::player::Player;
 use crate::tia::playfield::Playfield;
 
@@ -90,10 +90,6 @@ pub struct TIA {
     pixels: Vec<Vec<Color>>,
 }
 
-pub struct StepResult {
-    pub end_of_frame: bool,
-}
-
 impl TIA {
     pub fn new_tia() -> Self {
         let colors = Rc::new(RefCell::new(Colors::new_colors()));
@@ -145,8 +141,9 @@ impl TIA {
         }
     }
 
+    pub fn in_vblank(&self) -> bool { (self.vblank & 0x02) != 0 }
+    pub fn in_vsync(&self) -> bool { self.vsync }
     pub fn cpu_halt(&self) -> bool { self.wsync }
-
     pub fn get_pixels(&self) -> &Vec<Vec<Color>> { &self.pixels }
 
     pub fn joystick_fire(&mut self, pressed: bool) {
@@ -231,19 +228,13 @@ impl TIA {
         self.ctr.borrow().value() > RHB && self.ctr.borrow().value() <= SHB
     }
 
-    fn render_cycle(&self) -> bool {
-        let hblank_ctr_value = if self.late_reset_hblank {
-            LRHB
-        } else {
-            RHB
-        };
-
-        self.ctr.borrow().value() > hblank_ctr_value && self.ctr.borrow().value() <= SHB
+    fn in_late_reset(&self) -> bool {
+        self.late_reset_hblank && self.ctr.borrow().value() > RHB && self.ctr.borrow().value() <= LRHB
     }
 
     fn visible_scanline(&self) -> bool { self.scanline >= 40 && self.scanline < 232 }
 
-    pub fn clock(&mut self) -> StepResult {
+    pub fn clock(&mut self) {
         // https://www.randomterrain.com/atari-2600-memories-tutorial-andrew-davie-08.html
         //
         // There are 262 scanlines per frame
@@ -256,10 +247,6 @@ impl TIA {
         //   68 horizontal blanking dots
         //   160 visible dots
 
-        let mut rv = StepResult {
-            end_of_frame: false,
-        };
-
         // Clock the horizontal sync counter
         let clocked = self.ctr.borrow_mut().clock();
 
@@ -268,22 +255,34 @@ impl TIA {
                 // Update the collision registers
                 self.update_collisions();
 
-                // Player, missile, and ball counters only get clocked on visible cycles
-                self.p0.tick_visible();
-                self.p1.tick_visible();
-                self.m0.tick_visible();
-                self.m1.tick_visible();
-                self.bl.tick_visible();
+                let color;
 
-                let color = if self.render_cycle() {
-                    self.get_pixel_color() as usize
+                if self.in_late_reset() {
+                    // During LRHB we apply extra HMOVE clocks
+                    self.p0.apply_hmove();
+                    self.p1.apply_hmove();
+                    self.bl.apply_hmove();
+
+                    color = DEFAULT_COLOR;
                 } else {
-                    0 // default black
+                    // Player, missile, and ball counters only get clocked on visible cycles
+                    self.p0.clock();
+                    self.p1.clock();
+                    self.m0.tick_visible();
+                    self.m1.tick_visible();
+                    self.bl.clock();
+
+                    color = self.get_pixel_color() as usize
                 };
 
                 let x = self.ctr.borrow().internal_value as usize - 68;
                 let y = self.scanline as usize - 40;
                 self.pixels[y][x] = NTSC_PALETTE[color];
+            } else {
+                // During HBLANK we apply extra HMOVE clocks
+                self.p0.apply_hmove();
+                self.p1.apply_hmove();
+                self.bl.apply_hmove();
             }
         }
 
@@ -296,11 +295,6 @@ impl TIA {
                     // a VSYNC to reset the gun.
                     if self.scanline < 262 {
                         self.scanline += 1;
-                    }
-
-                    if self.scanline == 3 {
-                        // VBlank started
-                        rv.end_of_frame = true;
                     }
 
                     // Simply writing to the WSYNC causes the microprocessor to halt until the
@@ -330,8 +324,6 @@ impl TIA {
                 _ => { },
             }
         }
-
-        rv
     }
 }
 
@@ -609,8 +601,6 @@ impl Bus for TIA {
                 self.m1.start_hmove();
                 self.p0.start_hmove();
                 self.p1.start_hmove();
-
-                debug!("HMOVE: scanline {}, dot {}", self.scanline, self.ctr.borrow().internal_value);
 
                 self.late_reset_hblank = true;
             },

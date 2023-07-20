@@ -21,12 +21,11 @@ use crate::tia::TIA;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::Color;
 use sdl2::pixels::PixelFormatEnum;
-use sdl2::rect::Rect;
 
 const ATARI_FPS: f64 = 60.0;
 const FRAME_DURATION: Duration = Duration::from_millis(((1.0 / ATARI_FPS) * 1000.0) as u64);
+const CLOCKS_PER_SCANLINE: usize = 228;
 
 fn main() {
     env_logger::init();
@@ -78,106 +77,120 @@ fn main() {
     let mut texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24, width, height)
         .unwrap();
 
-    for _ in 0 .. 2 {
-        canvas.clear();
-        canvas.set_draw_color(Color::RGB(0, 0, 0));
-        canvas.fill_rect(Rect::new(0, 0, width, height)).unwrap();
-        canvas.present();
-    }
+    texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+        // Initialise a black canvas
+        for y in 0 .. height {
+            for x in 0 .. width {
+                let offset = (y * width) + x;
+                buffer[offset as usize] = 0;
+            }
+        }
+    }).unwrap();
+
+    canvas.clear();
+    canvas.copy(&texture, None, None).unwrap();
+    canvas.present();
 
     let mut event_pump = sdl_context.event_pump().unwrap();
-    let mut last_vblank = false;
     let mut fps_start = Instant::now();
-    let mut clock_count = 0;
+
+    let mut scanline = || {
+        for c in 0 .. CLOCKS_PER_SCANLINE {
+            if (c % 3) == 0 {
+                riot.borrow_mut().clock();
+            }
+
+            tia.borrow_mut().clock();
+
+            if !tia.borrow().cpu_halt() && (c % 3) == 2 {
+                cpu.clock();
+            }
+        }
+    };
 
     'running: loop {
-        if (clock_count % 3) == 0 {
-            riot.borrow_mut().clock();
+        // Generate one full frame
+        while tia.borrow().in_vsync() {
+            scanline();
+        }
+        while tia.borrow().in_vblank() {
+            scanline();
+        }
+        while !tia.borrow().in_vblank() {
+            scanline();
+        }
+        while !tia.borrow().in_vsync() {
+            scanline();
         }
 
-        tia.borrow_mut().clock();
+        for event in event_pump.poll_iter() {
+            match event {
+                Event::Quit { .. } => { break 'running },
+                Event::KeyDown { keycode: Some(key), .. } => {
+                    match key {
+                        Keycode::W => riot.borrow_mut().up(true),
+                        Keycode::A => riot.borrow_mut().left(true),
+                        Keycode::S => riot.borrow_mut().down(true),
+                        Keycode::D => riot.borrow_mut().right(true),
+                        Keycode::N => tia.borrow_mut().joystick_fire(true),
 
-        if !tia.borrow().cpu_halt() && (clock_count % 3) == 2 {
-            cpu.clock();
+                        Keycode::F1 => riot.borrow_mut().select(true),
+                        Keycode::F2 => riot.borrow_mut().reset(true),
+                        Keycode::F3 => riot.borrow_mut().color(),
+
+                        _ => {},
+                    }
+                },
+                Event::KeyUp { keycode: Some(key), .. } => {
+                    match key {
+                        Keycode::W => riot.borrow_mut().up(false),
+                        Keycode::A => riot.borrow_mut().left(false),
+                        Keycode::S => riot.borrow_mut().down(false),
+                        Keycode::D => riot.borrow_mut().right(false),
+                        Keycode::N => tia.borrow_mut().joystick_fire(false),
+
+                        Keycode::F1 => riot.borrow_mut().select(false),
+                        Keycode::F2 => riot.borrow_mut().reset(false),
+
+                        _ => {},
+                    }
+                },
+                _ => { },
+            }
         }
 
-        clock_count += 1;
-        clock_count %= 3;
+        if let Some(delay) = FRAME_DURATION.checked_sub(fps_start.elapsed()) {
+            thread::sleep(delay);
+        }
 
-        let vblank = tia.borrow().vblank();
+        fps_start = Instant::now();
 
-        if !last_vblank && vblank {
-            for event in event_pump.poll_iter() {
-                match event {
-                    Event::Quit { .. } => { break 'running },
-                    Event::KeyDown { keycode: Some(key), .. } => {
-                        match key {
-                            Keycode::W => riot.borrow_mut().up(true),
-                            Keycode::A => riot.borrow_mut().left(true),
-                            Keycode::S => riot.borrow_mut().down(true),
-                            Keycode::D => riot.borrow_mut().right(true),
-                            Keycode::N => tia.borrow_mut().joystick_fire(true),
+        let tia    = tia.borrow();
+        let pixels = tia.get_pixels();
 
-                            Keycode::F1 => riot.borrow_mut().select(true),
-                            Keycode::F2 => riot.borrow_mut().reset(true),
-                            Keycode::F3 => riot.borrow_mut().color(),
+        texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+            for y in 0 .. 192 {
+                for x in 0 .. 160 {
+                    let color  = pixels[y][x];
+                    let offset = 3*(y*pitch) + 5*(x*3);
 
-                            _ => {},
-                        }
-                    },
-                    Event::KeyUp { keycode: Some(key), .. } => {
-                        match key {
-                            Keycode::W => riot.borrow_mut().up(false),
-                            Keycode::A => riot.borrow_mut().left(false),
-                            Keycode::S => riot.borrow_mut().down(false),
-                            Keycode::D => riot.borrow_mut().right(false),
-                            Keycode::N => tia.borrow_mut().joystick_fire(false),
+                    for y2 in 0 .. 3 {
+                        let offset = offset + (y2 * pitch);
 
-                            Keycode::F1 => riot.borrow_mut().select(false),
-                            Keycode::F2 => riot.borrow_mut().reset(false),
+                        for x2 in 0 .. 5 {
+                            let offset = offset + (x2 * 3);
 
-                            _ => {},
-                        }
-                    },
-                    _ => { },
-                }
-            }
-
-            if let Some(delay) = FRAME_DURATION.checked_sub(fps_start.elapsed()) {
-                thread::sleep(delay);
-            }
-
-            fps_start = Instant::now();
-
-            let tia    = tia.borrow();
-            let pixels = tia.get_pixels();
-
-            texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
-                for y in 0 .. 192 {
-                    for x in 0 .. 160 {
-                        let color  = pixels[y][x];
-                        let offset = 3*(y*pitch) + 5*(x*3);
-
-                        for y2 in 0 .. 3 {
-                            let offset = offset + (y2 * pitch);
-
-                            for x2 in 0 .. 5 {
-                                let offset = offset + (x2 * 3);
-
-                                buffer[offset]   = color.r;
-                                buffer[offset+1] = color.g;
-                                buffer[offset+2] = color.b;
-                            }
+                            buffer[offset]   = color.r;
+                            buffer[offset+1] = color.g;
+                            buffer[offset+2] = color.b;
                         }
                     }
                 }
-            }).unwrap();
+            }
+        }).unwrap();
 
-            canvas.clear();
-            canvas.copy(&texture, None, None).unwrap();
-            canvas.present();
-        }
-
-        last_vblank = vblank;
+        canvas.clear();
+        canvas.copy(&texture, None, None).unwrap();
+        canvas.present();
     }
 }

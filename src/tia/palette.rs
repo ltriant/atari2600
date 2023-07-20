@@ -2,6 +2,8 @@
 
 use sdl2::pixels::Color;
 
+pub const DEFAULT_COLOR: usize = 0;
+
 lazy_static!{
     pub static ref NTSC_PALETTE: Vec<Color> = [
             0x000000,		// 00

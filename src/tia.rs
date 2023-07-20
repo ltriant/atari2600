@@ -463,7 +463,7 @@ impl Bus for TIA {
                 let player_copies = val & 0b0000_0111;
 
                 self.m0.set_size(missile_size);
-                self.p0.set_copies(player_copies);
+                self.p0.set_nusiz(player_copies);
             },
 
             // NUSIZ1  ..111111  number-size player-missile 1
@@ -478,7 +478,7 @@ impl Bus for TIA {
                 let player_copies = val & 0b0000_0111;
 
                 self.m1.set_size(missile_size);
-                self.p1.set_copies(player_copies);
+                self.p1.set_nusiz(player_copies);
             },
 
             // REFP0   ....1...  reflect player 0
@@ -531,14 +531,14 @@ impl Bus for TIA {
             // GRP0    11111111  graphics player 0
             0x001b => {
                 self.p0.set_graphic(val);
-                self.p1.use_old_value();
+                self.p1.set_vdel_value();
             },
 
             // GRP1    11111111  graphics player 1
             0x001c => {
                 self.p1.set_graphic(val);
-                self.p0.use_old_value();
-                self.bl.use_old_value();
+                self.p0.set_vdel_value();
+                self.bl.set_vdel_value();
             },
 
             // ENAM0   ......1.  graphics (enable) missile 0

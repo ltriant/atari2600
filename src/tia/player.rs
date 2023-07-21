@@ -6,10 +6,10 @@ use crate::tia::color::Colors;
 use crate::tia::counter::Counter;
 
 // Player sprites start 1 tick later than other sprites
-const INIT_DELAY: u8 = 5;
+const INIT_DELAY: isize = 5;
 
 // How many bits to a graphic
-const GRAPHIC_SIZE: usize = 8;
+const GRAPHIC_SIZE: isize= 8;
 
 pub struct Player {
     colors: Rc<RefCell<Colors>>,
@@ -24,18 +24,15 @@ pub struct Player {
     nusiz: u8,
     // The 8-bit graphic to draw
     graphic: u8,
-    // Delay - in TIA ticks - in rendering the graphic
-    graphic_delay: u8,
 
     // The VDELPx register
     vdel: bool,
     old_value: u8,
 
     // Graphics Scan Counter
-    graphic_draw: bool,
-    graphic_bit_idx: usize,
+    graphic_bit_idx: Option<isize>,
     graphic_bit_copies_written: usize,
-    graphic_bit_value: bool,
+    graphic_bit_value: Option<bool>,
 }
 
 impl Player {
@@ -50,15 +47,13 @@ impl Player {
             horizontal_mirror: false,
             nusiz: 0,
             graphic: 0,
-            graphic_delay: INIT_DELAY,
 
             vdel: false,
             old_value: 0,
 
-            graphic_draw: false,
-            graphic_bit_idx: 0,
+            graphic_bit_idx: None,
             graphic_bit_copies_written: 0,
-            graphic_bit_value: false,
+            graphic_bit_value: None,
         }
     }
 
@@ -82,8 +77,7 @@ impl Player {
         self.ctr.reset();
 
         if self.should_draw_graphic() || self.should_draw_copy() {
-            self.graphic_delay = INIT_DELAY;
-            self.graphic_draw = false;
+            self.graphic_bit_idx = Some(-1 * INIT_DELAY);
             self.graphic_bit_copies_written = 0;
         }
     }
@@ -95,45 +89,44 @@ impl Player {
 
     // Based on current state, return whether or not we are rendering this sprite
     fn pixel_bit(&self) -> bool {
-        let x = self.graphic_bit_idx;
+        if let Some(x) = self.graphic_bit_idx {
+            let graphic = if self.vdel {
+                self.old_value
+            } else {
+                self.graphic
+            };
 
-        let graphic = if self.vdel {
-            self.old_value
+            return if self.horizontal_mirror {
+                (graphic & (1 << x)) != 0
+            } else {
+                (graphic & (1 << (7 - x))) != 0
+            };
         } else {
-            self.graphic
-        };
-
-        if self.horizontal_mirror {
-            (graphic & (1 << x)) != 0
-        } else {
-            (graphic & (1 << (7 - x))) != 0
+            return false;
         }
     }
 
     fn tick_graphic_circuit(&mut self) {
-        // Handle any graphics delays first
-        if self.graphic_delay > 0 {
-            self.graphic_delay -= 1;
+        if let Some(mut idx) = self.graphic_bit_idx {
+            if idx >= 0 && idx < 8 {
+                self.graphic_bit_value = Some(self.pixel_bit());
 
-            if self.graphic_delay == 0 {
-                self.graphic_draw = true;
+                self.graphic_bit_copies_written += 1;
+                if self.graphic_bit_copies_written == self.copies() {
+                    self.graphic_bit_copies_written = 0;
+                    idx += 1;
+                }
+
+                if idx == GRAPHIC_SIZE {
+                    self.graphic_bit_idx = None;
+                } else {
+                    self.graphic_bit_idx = Some(idx);
+                }
+            } else {
+                self.graphic_bit_idx = Some(idx + 1);
             }
-        }
-
-        if self.graphic_delay == 0 && self.graphic_draw {
-            self.graphic_bit_value = self.pixel_bit();
-
-            self.graphic_bit_copies_written += 1;
-            if self.graphic_bit_copies_written == self.copies() {
-                self.graphic_bit_copies_written = 0;
-                self.graphic_bit_idx += 1;
-            }
-
-            if self.graphic_bit_idx == GRAPHIC_SIZE {
-                self.graphic_bit_idx = 0;
-                self.graphic_bit_copies_written = 0;
-                self.graphic_draw = false;
-            }
+        } else {
+            self.graphic_bit_value = None;
         }
     }
 
@@ -153,8 +146,7 @@ impl Player {
         self.tick_graphic_circuit();
 
         if self.ctr.clock() && (self.should_draw_graphic() || self.should_draw_copy()) {
-            self.graphic_delay = INIT_DELAY;
-            self.graphic_draw = false;
+            self.graphic_bit_idx = Some(-1 * INIT_DELAY);
             self.graphic_bit_copies_written = 0;
         }
     }
@@ -163,8 +155,7 @@ impl Player {
         let (moved, counter_clocked) = self.ctr.apply_hmove(self.hmove_offset);
 
         if counter_clocked && (self.should_draw_graphic() || self.should_draw_copy()) {
-            self.graphic_delay = INIT_DELAY;
-            self.graphic_draw = false;
+            self.graphic_bit_idx = Some(-1 * INIT_DELAY);
             self.graphic_bit_copies_written = 0;
         }
 
@@ -174,7 +165,7 @@ impl Player {
     }
 
     pub fn get_color(&self) -> Option<u8> {
-        if self.graphic_draw && self.graphic_bit_value {
+        if let Some(true) = self.graphic_bit_value {
             let color = match self.player {
                 PlayerType::Player0 => self.colors.borrow().colup0(),
                 PlayerType::Player1 => self.colors.borrow().colup1(),

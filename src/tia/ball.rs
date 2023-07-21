@@ -4,19 +4,27 @@ use std::cell::RefCell;
 use crate::tia::color::Colors;
 use crate::tia::counter::Counter;
 
+const INIT_DELAY: isize = 4;
+const GRAPHIC_SIZE: isize = 1;
+
 pub struct Ball {
     colors: Rc<RefCell<Colors>>,
 
-    enabled: bool,
-    size: usize,
     hmove_offset: u8,
     ctr: Counter,
+
+    enabled: bool,
+    // The ball sizee from the CTRLPF register
+    nusiz: usize,
+
+    // The VDELBL register
     vdel: bool,
     old_value: bool,
 
-    bit_copies_written: usize,
-    graphic_bit: Option<isize>,
-    graphic_bit_value: bool,
+    // Graphics Scan Counter
+    graphic_bit_idx: Option<isize>,
+    graphic_bit_copies_written: usize,
+    graphic_bit_value: Option<bool>,
 }
 
 impl Ball {
@@ -24,76 +32,33 @@ impl Ball {
         Self {
             colors: colors,
 
-            enabled: false,
-            size: 0,
             hmove_offset: 0,
             ctr: Counter::new_counter(40, 39),
+
+            enabled: false,
+            nusiz: 1,
+
             vdel: false,
             old_value: false,
 
-            bit_copies_written: 0,
-            graphic_bit: None,
-            graphic_bit_value: false,
+            graphic_bit_idx: None,
+            graphic_bit_copies_written: 0,
+            graphic_bit_value: None,
         }
     }
 
-    pub fn enabled(&self) -> bool { self.enabled }
     pub fn set_enabled(&mut self, v: bool) { self.enabled = v }
     pub fn set_hmove_value(&mut self, v: u8) { self.hmove_offset = v }
     pub fn set_vdel(&mut self, v: bool) { self.vdel = v }
-    pub fn use_old_value(&mut self) { self.old_value = self.enabled }
-    pub fn set_size(&mut self, size: usize) { self.size = size }
+    pub fn set_vdel_value(&mut self) { self.old_value = self.enabled }
+    pub fn set_nusiz(&mut self, size: usize) { self.nusiz = size }
     pub fn hmclr(&mut self) { self.hmove_offset = 0 }
     pub fn reset(&mut self) {
         self.ctr.reset();
-        self.graphic_bit = Some(-4);
-        self.bit_copies_written = 0;
-        self.graphic_bit_value = false;
-    }
 
-    pub fn tick_visible(&mut self) {
-        self.tick_graphic_circuit();
-        if self.ctr.clock() && self.ctr.value() == 39 {
-            self.graphic_bit = Some(-4);
-            self.bit_copies_written = 0;
-        }
-    }
-
-    pub fn tick_hblank(&mut self) {
-        let delayed = self.ctr.apply_hmove();
-
-        if delayed {
-            self.tick_graphic_circuit();
-            if self.ctr.clock() && self.ctr.value() == 39 {
-                self.graphic_bit = Some(-4);
-                self.bit_copies_written = 0;
-            }
-        }
-    }
-
-    fn tick_graphic_circuit(&mut self) {
-        if let Some(v) = self.graphic_bit {
-            let mut new_v = v;
-
-            if v >= 0 && v < 8 {
-                self.graphic_bit_value = true;
-
-                self.bit_copies_written += 1;
-                if self.bit_copies_written == self.size {
-                    new_v = v + 1;
-                    self.bit_copies_written = 0;
-                }
-            } else {
-                new_v = v + 1;
-            }
-
-            if new_v == 1 {
-                self.graphic_bit = None;
-            } else {
-                self.graphic_bit = Some(new_v);
-            }
-        } else {
-            self.graphic_bit_value = false;
+        if self.should_draw_graphic() || self.should_draw_copy() {
+            self.graphic_bit_idx = Some(-1 * INIT_DELAY);
+            self.graphic_bit_copies_written = 0;
         }
     }
 
@@ -102,9 +67,69 @@ impl Ball {
         self.tick_graphic_circuit();
     }
 
+    fn copies(&self) -> usize { self.nusiz }
+    fn pixel_bit(&self) -> bool {
+        if self.vdel {
+            self.old_value
+        } else {
+            self.enabled
+        }
+    }
+
+    fn tick_graphic_circuit(&mut self) {
+        if let Some(mut idx) = self.graphic_bit_idx {
+            if idx >= 0 && idx < 8 {
+                self.graphic_bit_value = Some(self.pixel_bit());
+
+                self.graphic_bit_copies_written += 1;
+                if self.graphic_bit_copies_written == self.copies() {
+                    self.graphic_bit_copies_written = 0;
+                    idx += 1;
+                }
+
+                if idx == GRAPHIC_SIZE {
+                    self.graphic_bit_idx = None;
+                } else {
+                    self.graphic_bit_idx = Some(idx);
+                }
+            } else {
+                self.graphic_bit_idx = Some(idx + 1);
+            }
+        } else {
+            self.graphic_bit_value = None;
+        }
+    }
+
+    fn should_draw_graphic(&self) -> bool {
+        self.ctr.value() == 39
+    }
+
+    fn should_draw_copy(&self) -> bool { false }
+
+    pub fn clock(&mut self) {
+        self.tick_graphic_circuit();
+
+        if self.ctr.clock() && (self.should_draw_graphic() || self.should_draw_copy()) {
+            self.graphic_bit_idx = Some(-1 * INIT_DELAY);
+            self.graphic_bit_copies_written = 0;
+        }
+    }
+
+    pub fn apply_hmove(&mut self) {
+        let (moved, counter_clocked) = self.ctr.apply_hmove(self.hmove_offset);
+
+        if counter_clocked && (self.should_draw_graphic() || self.should_draw_copy()) {
+            self.graphic_bit_idx = Some(-1 * INIT_DELAY);
+            self.graphic_bit_copies_written = 0;
+        }
+
+        if moved {
+            self.tick_graphic_circuit();
+        }
+    }
+
     pub fn get_color(&self) -> Option<u8> {
-        if self.enabled && self.graphic_bit_value {
-        //if self.enabled && self.ctr.internal_value < self.size as u8 {
+        if let Some(true) = self.graphic_bit_value {
             return Some(self.colors.borrow().colupf());
         }
 

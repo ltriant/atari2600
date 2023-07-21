@@ -77,7 +77,7 @@ fn main() {
     let mut texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24, width, height)
         .unwrap();
 
-    texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+    texture.with_lock(None, |buffer: &mut [u8], _pitch: usize| {
         // Initialise a black canvas
         for y in 0 .. height {
             for x in 0 .. width {

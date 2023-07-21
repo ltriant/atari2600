@@ -6,7 +6,7 @@ use crate::tia::counter::Counter;
 
 pub struct Playfield {
     colors: Rc<RefCell<Colors>>,
-    ctr: Rc<RefCell<Counter>>,
+    ctr: Counter,
 
     // 20-bit playfield
     // .... | .... .... | .... ....
@@ -19,13 +19,15 @@ pub struct Playfield {
     horizontal_mirror: bool,
     score_mode: bool,
     priority: bool,
+
+    graphic_bit_value: Option<u8>,
 }
 
 impl Playfield {
-    pub fn new_playfield(colors: Rc<RefCell<Colors>>, ctr: Rc<RefCell<Counter>>) -> Self {
+    pub fn new_playfield(colors: Rc<RefCell<Colors>>) -> Self {
         Self {
             colors: colors,
-            ctr: ctr,
+            ctr: Counter::new_counter(40, 39),
 
             pf0: 0,
             pf1: 0,
@@ -35,6 +37,8 @@ impl Playfield {
             horizontal_mirror: false,
             score_mode: false,
             priority: false,
+
+            graphic_bit_value: None,
         }
     }
 
@@ -73,47 +77,50 @@ impl Playfield {
         self.score_mode        = (val & 0x02) != 0 && !self.priority;
     }
 
-    pub fn priority(&self) -> bool { self.priority }
+    fn tick_graphic_circuit(&mut self) {
+        let ctr = self.ctr.value() as usize;
+        let pf_x = ctr % 20;
 
-    pub fn get_color(&self) -> Option<u8> {
-        let ctr = self.ctr.borrow().value();
-
-        if ctr <= 16 {
-            return None;
-        }
-
-        if ctr <= 36 {
-            let pf_x = ctr - 17;
-
-            if self.pf[pf_x as usize] {
-                return if self.score_mode {
-                    Some(self.colors.borrow().colup0())
+        if ctr < 20 {
+            if self.pf[pf_x] {
+                if self.score_mode {
+                    self.graphic_bit_value = Some(self.colors.borrow().colup0())
                 } else {
-                    Some(self.colors.borrow().colupf())
+                    self.graphic_bit_value = Some(self.colors.borrow().colupf())
                 };
+            } else {
+                self.graphic_bit_value = None;
             }
         } else {
             // The playfield also makes up the right-most side of the
             // screen, optionally mirrored horizontally as denoted by the
             // CTRLPF register.
-
-            let pf_x = ctr - 36 - 1;
-
             let idx = if self.horizontal_mirror {
-                self.pf.len() - 1 - pf_x as usize
+                self.pf.len() - 1 - pf_x
             } else {
-                pf_x as usize
+                pf_x
             };
 
             if self.pf[idx] {
-                return if self.score_mode {
-                    Some(self.colors.borrow().colup1())
+                if self.score_mode {
+                    self.graphic_bit_value = Some(self.colors.borrow().colup1())
                 } else {
-                    Some(self.colors.borrow().colupf())
+                    self.graphic_bit_value = Some(self.colors.borrow().colupf())
                 };
+            } else {
+                self.graphic_bit_value = None;
             }
         }
+    }
 
-        return None;
+    pub fn clock(&mut self) {
+        self.tick_graphic_circuit();
+        self.ctr.clock();
+    }
+
+    pub fn priority(&self) -> bool { self.priority }
+
+    pub fn get_color(&self) -> Option<u8> {
+        self.graphic_bit_value
     }
 }

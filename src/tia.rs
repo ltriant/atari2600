@@ -94,7 +94,7 @@ impl TIA {
     pub fn new_tia() -> Self {
         let colors = Rc::new(RefCell::new(Colors::new_colors()));
         let hsync_ctr = Rc::new(RefCell::new(Counter::new_counter(57, 0)));
-        let pf = Playfield::new_playfield(colors.clone(), hsync_ctr.clone());
+        let pf = Playfield::new_playfield(colors.clone());
         let bl = Ball::new_ball(colors.clone());
         let m0 = Missile::new_missile(colors.clone(), PlayerType::Player0);
         let m1 = Missile::new_missile(colors.clone(), PlayerType::Player1);
@@ -252,6 +252,9 @@ impl TIA {
 
         if self.visible_scanline() {
             if self.visible_cycle() {
+                // Playfield is clocked on every visible cycle
+                self.pf.clock();
+
                 // Update the collision registers
                 self.update_collisions();
 

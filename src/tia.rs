@@ -261,6 +261,8 @@ impl TIA {
                     // During LRHB we apply extra HMOVE clocks
                     self.p0.apply_hmove();
                     self.p1.apply_hmove();
+                    self.m0.apply_hmove();
+                    self.m1.apply_hmove();
                     self.bl.apply_hmove();
 
                     color = DEFAULT_COLOR;
@@ -268,8 +270,8 @@ impl TIA {
                     // Player, missile, and ball counters only get clocked on visible cycles
                     self.p0.clock();
                     self.p1.clock();
-                    self.m0.tick_visible();
-                    self.m1.tick_visible();
+                    self.m0.clock();
+                    self.m1.clock();
                     self.bl.clock();
 
                     color = self.get_pixel_color() as usize
@@ -282,6 +284,8 @@ impl TIA {
                 // During HBLANK we apply extra HMOVE clocks
                 self.p0.apply_hmove();
                 self.p1.apply_hmove();
+                self.m0.apply_hmove();
+                self.m1.apply_hmove();
                 self.bl.apply_hmove();
             }
         }
@@ -424,14 +428,7 @@ impl Bus for TIA {
             // CTRLPF  ..11.111  control playfield ball size & collisions
             0x000a => {
                 self.pf.set_control(val);
-                let ball_size = match (val & 0b0011_0000) >> 4 {
-                    0 => 1,
-                    1 => 2,
-                    2 => 4,
-                    3 => 8,
-                    _ => unreachable!(),
-                };
-                self.bl.set_size(ball_size);
+                self.bl.set_nusiz(1 << ((val & 0b0011_0000) >> 4));
             },
 
             //
@@ -462,7 +459,7 @@ impl Bus for TIA {
                 };
                 let player_copies = val & 0b0000_0111;
 
-                self.m0.set_size(missile_size);
+                self.m0.set_nusiz(missile_size);
                 self.p0.set_nusiz(player_copies);
             },
 
@@ -477,7 +474,7 @@ impl Bus for TIA {
                 };
                 let player_copies = val & 0b0000_0111;
 
-                self.m1.set_size(missile_size);
+                self.m1.set_nusiz(missile_size);
                 self.p1.set_nusiz(player_copies);
             },
 
@@ -581,16 +578,14 @@ impl Bus for TIA {
             // RESMP0  ......1.  reset missile 0 to player 0
             0x0028 => {
                 if (val & 0x02) != 0 {
-                    //self.m0.reset_to_player(self.p0);
-                    self.m0.reset_to_player();
+                    self.m0.reset_to_player(&self.p0);
                 }
             },
 
             // RESMP1  ......1.  reset missile 1 to player 1
             0x0029 => {
                 if (val & 0x02) != 0 {
-                    //self.m1.reset_to_player(self.p1);
-                    self.m1.reset_to_player();
+                    self.m1.reset_to_player(&self.p1);
                 }
             },
 

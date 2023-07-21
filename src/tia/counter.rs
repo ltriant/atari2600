@@ -39,8 +39,8 @@ impl Counter {
         self.internal_value / 4
     }
 
-    pub fn set_value(&mut self, val: u8) {
-        self.internal_value = val * 4;
+    pub fn reset_to(&mut self, v: u8) {
+        self.internal_value = v;
     }
 
     pub fn clock(&mut self) -> bool {

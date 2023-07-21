@@ -70,6 +70,7 @@ impl Player {
         }
     }
 
+    pub fn counter(&self) -> &Counter { &self.ctr }
     pub fn set_hmove_value(&mut self, v: u8) { self.hmove_offset = v }
     pub fn set_graphic(&mut self, graphic: u8) { self.graphic = graphic }
     pub fn set_horizontal_mirror(&mut self, reflect: bool) { self.horizontal_mirror = reflect }

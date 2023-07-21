@@ -91,15 +91,15 @@ pub struct TIA {
 }
 
 impl TIA {
-    pub fn new_tia() -> Self {
-        let colors = Rc::new(RefCell::new(Colors::new_colors()));
-        let hsync_ctr = Rc::new(RefCell::new(Counter::new_counter(57, 0)));
-        let pf = Playfield::new_playfield(colors.clone());
-        let bl = Ball::new_ball(colors.clone());
-        let m0 = Missile::new_missile(colors.clone(), PlayerType::Player0);
-        let m1 = Missile::new_missile(colors.clone(), PlayerType::Player1);
-        let p0 = Player::new_player(colors.clone(), PlayerType::Player0);
-        let p1 = Player::new_player(colors.clone(), PlayerType::Player1);
+    pub fn new() -> Self {
+        let colors = Rc::new(RefCell::new(Colors::new()));
+        let hsync_ctr = Rc::new(RefCell::new(Counter::new(57, 0)));
+        let pf = Playfield::new(colors.clone());
+        let bl = Ball::new(colors.clone());
+        let m0 = Missile::new(colors.clone(), PlayerType::Player0);
+        let m1 = Missile::new(colors.clone(), PlayerType::Player1);
+        let p0 = Player::new(colors.clone(), PlayerType::Player0);
+        let p1 = Player::new(colors.clone(), PlayerType::Player1);
 
         Self {
             scanline: 0,

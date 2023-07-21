@@ -24,10 +24,10 @@ pub struct Playfield {
 }
 
 impl Playfield {
-    pub fn new_playfield(colors: Rc<RefCell<Colors>>) -> Self {
+    pub fn new(colors: Rc<RefCell<Colors>>) -> Self {
         Self {
             colors: colors,
-            ctr: Counter::new_counter(40, 39),
+            ctr: Counter::new(40, 39),
 
             pf0: 0,
             pf1: 0,

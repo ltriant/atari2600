@@ -21,7 +21,7 @@ pub struct RIOT {
 }
 
 impl RIOT {
-    pub fn new_riot() -> Self {
+    pub fn new() -> Self {
         // Initialise port B with the P0 and P1 difficulty bits set to 1. Should probably make this
         // switchable in the interface. We also set the color switch to color, just because that's a
         // nicer default in 2023.

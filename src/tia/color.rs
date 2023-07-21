@@ -6,7 +6,7 @@ pub struct Colors {
 }
 
 impl Colors {
-    pub fn new_colors() -> Self {
+    pub fn new() -> Self {
         Self {
             colup0: 0,
             colup1: 0,

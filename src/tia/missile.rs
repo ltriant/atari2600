@@ -25,7 +25,7 @@ pub struct Missile {
 }
 
 impl Missile {
-    pub fn new_missile(colors: Rc<RefCell<Colors>>, sibling_player: PlayerType) -> Self {
+    pub fn new(colors: Rc<RefCell<Colors>>, sibling_player: PlayerType) -> Self {
         Self {
             colors: colors,
             sibling_player: sibling_player,
@@ -33,7 +33,7 @@ impl Missile {
             enabled: false,
             hmove_offset: 0,
             nusiz: 0,
-            ctr: Counter::new_counter(40, 39),
+            ctr: Counter::new(40, 39),
 
             graphic_bit_idx: None,
             graphic_bit_copies_written: 0,

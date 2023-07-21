@@ -36,13 +36,13 @@ pub struct Player {
 }
 
 impl Player {
-    pub fn new_player(colors: Rc<RefCell<Colors>>, player: PlayerType) -> Self {
+    pub fn new(colors: Rc<RefCell<Colors>>, player: PlayerType) -> Self {
         return Self {
             colors: colors,
             player: player,
 
             hmove_offset: 0,
-            ctr: Counter::new_counter(40, 39),
+            ctr: Counter::new(40, 39),
 
             horizontal_mirror: false,
             nusiz: 0,

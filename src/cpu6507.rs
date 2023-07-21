@@ -537,7 +537,7 @@ impl Bus for CPU6507 {
 }
 
 impl CPU6507 {
-    pub fn new_cpu(bus: Box<dyn Bus>) -> Self {
+    pub fn new(bus: Box<dyn Bus>) -> Self {
         Self {
             bus: bus,
 

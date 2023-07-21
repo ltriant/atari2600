@@ -28,12 +28,12 @@ pub struct Ball {
 }
 
 impl Ball {
-    pub fn new_ball(colors: Rc<RefCell<Colors>>) -> Self {
+    pub fn new(colors: Rc<RefCell<Colors>>) -> Self {
         Self {
             colors: colors,
 
             hmove_offset: 0,
-            ctr: Counter::new_counter(40, 39),
+            ctr: Counter::new(40, 39),
 
             enabled: false,
             nusiz: 1,

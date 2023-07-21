@@ -19,7 +19,7 @@ fn hmove_value(v: u8) -> u8 {
 }
 
 impl Counter {
-    pub fn new_counter(period: u8, reset_value: u8) -> Self {
+    pub fn new(period: u8, reset_value: u8) -> Self {
         Self {
             period: period,
             reset_value: reset_value,

@@ -20,7 +20,7 @@ pub struct AtariBus {
 }
 
 impl AtariBus {
-    pub fn new_bus(tia: Rc<RefCell<TIA>>, riot: Rc<RefCell<RIOT>>, rom: Vec<u8>) -> Self {
+    pub fn new(tia: Rc<RefCell<TIA>>, riot: Rc<RefCell<RIOT>>, rom: Vec<u8>) -> Self {
         Self {
             rom: rom,
             tia: tia,

@@ -39,18 +39,18 @@ fn main() {
     let bytes = fh.read_to_end(&mut rom).expect("unable to read rom data");
     info!("read {} bytes of ROM data", bytes);
 
-    let riot = Rc::new(RefCell::new(RIOT::new_riot()));
+    let riot = Rc::new(RefCell::new(RIOT::new()));
     riot.borrow_mut().up(false);
     riot.borrow_mut().down(false);
     riot.borrow_mut().left(false);
     riot.borrow_mut().right(false);
 
-    let tia = Rc::new(RefCell::new(TIA::new_tia()));
+    let tia = Rc::new(RefCell::new(TIA::new()));
     tia.borrow_mut().joystick_fire(false);
 
-    let bus = AtariBus::new_bus(tia.clone(), riot.clone(), rom);
+    let bus = AtariBus::new(tia.clone(), riot.clone(), rom);
 
-    let mut cpu = CPU6507::new_cpu(Box::new(bus));
+    let mut cpu = CPU6507::new(Box::new(bus));
     cpu.reset();
 
     //

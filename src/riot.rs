@@ -130,6 +130,9 @@ impl RIOT {
         // register to record this fact.
         if underflowed {
             self.instat = 0b1100_0000;
+
+            // Once when the timer does underflow, it restarts at FFh, and is then decremented once
+            // per clock cycle, regardless of the selected interval.
             self.resolution = 1;
         }
 

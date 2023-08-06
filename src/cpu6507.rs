@@ -4,7 +4,6 @@ use std::process;
 use crate::bus::Bus;
 
 const STACK_INIT: u8 = 0xff;
-const DOTS_PER_SCANLINE: u64 = 228;
 
 lazy_static!{
     static ref CPU6507_DEBUG: bool = match env::var("CPU6507_DEBUG") {
@@ -634,9 +633,7 @@ impl CPU6507 {
             .collect::<Vec<_>>()
             .join(" ");
 
-        let ppu_dots = self.cycles * 3 % DOTS_PER_SCANLINE;
-
-        println!("{:04X}  {:8}  {:32?} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X} CYC:{:-3}",
+        println!("{:04X}  {:8}  {:32?} A:{:02X} X:{:02X} Y:{:02X} P:{:02X} SP:{:02X}",
                  self.pc,
                  bytes,
                  inst,
@@ -644,8 +641,7 @@ impl CPU6507 {
                  self.x,
                  self.y,
                  self.flags(),
-                 self.sp,
-                 ppu_dots);
+                 self.sp);
     }
 
     fn stack_push8(&mut self, val: u8) {

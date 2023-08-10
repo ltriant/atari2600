@@ -21,7 +21,7 @@ use crate::tia::TIA;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
-use sdl2::pixels::PixelFormatEnum;
+use sdl2::pixels::{Color, PixelFormatEnum};
 
 const ATARI_FPS: f64 = 60.0;
 const FRAME_DURATION: Duration = Duration::from_millis(((1.0 / ATARI_FPS) * 1000.0) as u64);
@@ -106,22 +106,60 @@ fn main() {
                 cpu.clock();
             }
         }
+
+        return tia.borrow().get_scanline_pixels().clone();
     };
+
+    let mut frames = 0;
+
+    let mut vsync = 0;
+    let mut vblank = 0;
+    let mut visible = 0;
+
+    let mut frame_pixels = vec![vec![Color::RGB(0, 0, 0); 160]; 192];
 
     'running: loop {
         // Generate one full frame
+
+        // VSync
         while tia.borrow().in_vsync() {
             scanline();
+            vsync += 1;
         }
+
+        // VBlank
         while tia.borrow().in_vblank() {
             scanline();
+            vblank += 1;
         }
+
+        // Picture
+        let mut y = 0;
         while !tia.borrow().in_vblank() {
-            scanline();
+            let pixels = scanline();
+            if y < frame_pixels.len() {
+                frame_pixels[y] = pixels;
+            }
+            y += 1;
+
+            visible += 1;
         }
+
+        // Overscan
         while !tia.borrow().in_vsync() {
             scanline();
         }
+
+        frames += 1;
+
+        debug!("line counts: vsync: {}, vblank: {}, visible: {}, scanlines: {}",
+               vsync,
+               vblank,
+               visible,
+               frame_pixels.len());
+        vsync = 0;
+        vblank = 0;
+        visible = 0;
 
         for event in event_pump.poll_iter() {
             match event {
@@ -165,13 +203,10 @@ fn main() {
 
         fps_start = Instant::now();
 
-        let tia    = tia.borrow();
-        let pixels = tia.get_pixels();
-
         texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
             for y in 0 .. 192 {
                 for x in 0 .. 160 {
-                    let color  = pixels[y][x];
+                    let color  = frame_pixels[y][x];
                     let offset = 3*(y*pitch) + 5*(x*3);
 
                     for y2 in 0 .. 3 {

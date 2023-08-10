@@ -47,9 +47,6 @@ const CNT: u8 = 36;
 const SHB: u8 = 56;
 
 pub struct TIA {
-    // The scanline we're currently processing
-    scanline: u16,
-
     // HSYNC counter
     ctr: Rc<RefCell<Counter>>,
 
@@ -86,8 +83,9 @@ pub struct TIA {
     m1: Missile,
     bl: Ball,
 
-    // Pixels to be rendered
-    pixels: Vec<Vec<Color>>,
+    // One scanline of pixels to be rendered. It's up to the calling code to call
+    // `get_scanline_pixels` at the end of each scanline.
+    pixels: Vec<Color>,
 }
 
 impl TIA {
@@ -102,8 +100,6 @@ impl TIA {
         let p1 = Player::new(colors.clone(), PlayerType::Player1);
 
         Self {
-            scanline: 0,
-
             ctr: hsync_ctr,
 
             vsync: false,
@@ -137,14 +133,14 @@ impl TIA {
             p0: p0,
             p1: p1,
 
-            pixels: vec![vec![Color::RGB(0, 0, 0); 160]; 192],
+            pixels: vec![Color::RGB(0, 0, 0); 160],
         }
     }
 
     pub fn in_vblank(&self) -> bool { (self.vblank & 0x02) != 0 }
     pub fn in_vsync(&self) -> bool { self.vsync }
     pub fn cpu_halt(&self) -> bool { self.wsync }
-    pub fn get_pixels(&self) -> &Vec<Vec<Color>> { &self.pixels }
+    pub fn get_scanline_pixels(&self) -> &Vec<Color> { &self.pixels }
 
     pub fn joystick_fire(&mut self, pressed: bool) {
         self.inpt4_port = !pressed;
@@ -232,65 +228,48 @@ impl TIA {
         self.late_reset_hblank && self.ctr.borrow().value() > RHB && self.ctr.borrow().value() <= LRHB
     }
 
-    fn visible_scanline(&self) -> bool { self.scanline >= 40 && self.scanline < 232 }
-
     pub fn clock(&mut self) {
-        // https://www.randomterrain.com/atari-2600-memories-tutorial-andrew-davie-08.html
-        //
-        // There are 262 scanlines per frame
-        //   3 vertical sync scanlines
-        //   37 vertical blanking scanlines
-        //   192 visible scanlines
-        //   30 overscan scanlines
-        //
-        // Each scanline has 228 dots
-        //   68 horizontal blanking dots
-        //   160 visible dots
-
         // Clock the horizontal sync counter
         let clocked = self.ctr.borrow_mut().clock();
 
-        if self.visible_scanline() {
-            if self.visible_cycle() {
-                // Playfield is clocked on every visible cycle
-                self.pf.clock();
+        if self.visible_cycle() {
+            // Playfield is clocked on every visible cycle
+            self.pf.clock();
 
-                // Update the collision registers
-                self.update_collisions();
+            // Update the collision registers
+            self.update_collisions();
 
-                let color;
+            let color;
 
-                if self.in_late_reset() {
-                    // During LRHB we apply extra HMOVE clocks
-                    self.p0.apply_hmove();
-                    self.p1.apply_hmove();
-                    self.m0.apply_hmove();
-                    self.m1.apply_hmove();
-                    self.bl.apply_hmove();
-
-                    color = DEFAULT_COLOR;
-                } else {
-                    // Player, missile, and ball counters only get clocked on visible cycles
-                    self.p0.clock();
-                    self.p1.clock();
-                    self.m0.clock();
-                    self.m1.clock();
-                    self.bl.clock();
-
-                    color = self.get_pixel_color() as usize
-                };
-
-                let x = self.ctr.borrow().internal_value as usize - 68;
-                let y = self.scanline as usize - 40;
-                self.pixels[y][x] = NTSC_PALETTE[color];
-            } else {
-                // During HBLANK we apply extra HMOVE clocks
+            if self.in_late_reset() {
+                // During LRHB we apply extra HMOVE clocks
                 self.p0.apply_hmove();
                 self.p1.apply_hmove();
                 self.m0.apply_hmove();
                 self.m1.apply_hmove();
                 self.bl.apply_hmove();
-            }
+
+                color = DEFAULT_COLOR;
+            } else {
+                // Player, missile, and ball counters only get clocked on visible cycles
+                self.p0.clock();
+                self.p1.clock();
+                self.m0.clock();
+                self.m1.clock();
+                self.bl.clock();
+
+                color = self.get_pixel_color() as usize
+            };
+
+            let x = self.ctr.borrow().internal_value as usize - 68;
+            self.pixels[x] = NTSC_PALETTE[color];
+        } else {
+            // During HBLANK we apply extra HMOVE clocks
+            self.p0.apply_hmove();
+            self.p1.apply_hmove();
+            self.m0.apply_hmove();
+            self.m1.apply_hmove();
+            self.bl.apply_hmove();
         }
 
         if clocked {
@@ -298,35 +277,17 @@ impl TIA {
                 // If we've reset the counter back to 0, we've finished the scanline and started
                 // a new scanline, in HBlank.
                 0 => {
-                    // If we hit the last scanline, we have to wait for the programmer to signal
-                    // a VSYNC to reset the gun.
-                    if self.scanline < 262 {
-                        self.scanline += 1;
-                    }
-
                     // Simply writing to the WSYNC causes the microprocessor to halt until the
                     // electron beam reaches the right edge of the screen.
                     self.wsync = false;
-
-                    if self.late_reset_hblank {
-                        //debug!("LRHB: scanline {}, dot {} RESET", self.scanline, self.ctr.internal_value);
-                    }
                     self.late_reset_hblank = false;
                 },
 
                 // Reset HBlank
-                RHB => {
-                    if !self.late_reset_hblank {
-                        //debug!("RHB: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
-                    }
-                },
+                RHB => { },
 
                 // Late Reset HBlank
-                LRHB => {
-                    if self.late_reset_hblank {
-                        //debug!("LRHB: scanline {}, dot {}", self.scanline, self.ctr.internal_value);
-                    }
-                },
+                LRHB => { },
 
                 _ => { },
             }
@@ -392,7 +353,6 @@ impl Bus for TIA {
 
                 if self.vsync {
                     self.ctr.borrow_mut().reset();
-                    self.scanline = 0;
                 }
             },
 
@@ -624,7 +584,7 @@ impl Bus for TIA {
                 self.cxppmm = 0;
             },
 
-            _ => debug!("register: 0x{:04X} 0x{:02X}", address, val), 
+            _ => { }, 
         }
     }
 }

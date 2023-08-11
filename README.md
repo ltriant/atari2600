@@ -19,7 +19,7 @@ The goal of this is to be able to play a couple of key games that have sentiment
 11. ~~Graphics delay on LRHB~~
 12. ~~Vertical delay~~
 13. ~~Collision flags~~
-14. Better frame timing
+14. Fix frame timing
 15. ~~RIOT chip (MOS 6532) for peripherals~~
 16. Fix small horizontal position bugs
 17. Audio

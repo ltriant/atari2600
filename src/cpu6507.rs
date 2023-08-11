@@ -845,15 +845,31 @@ impl CPU6507 {
         let val = self.read(addr);
 
         if self.d {
-            let v1 = (self.a / 16) * 10 + (self.a % 16);
-            let v2 = (val / 16) * 10 + (val % 16);
-            let n  = (v1 as u16) + (v2 as u16) + (self.c as u16);
-            let a  = (n & 0x00ff) as u8;
+            let mut lo = (self.a as u16 & 0x0f) + (val as u16 & 0x0f) + (self.c as u16);
+            let mut hi = (self.a as u16 & 0xf0) + (val as u16 & 0xf0);
 
-            self.update_sz(a);
-            self.c = (v1 + v2) > 99;
-            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
-            self.a = a;
+            // In BCD, values 0x0A to 0x0F are invalid, so we add 1 to the high nybble for the
+            // carry, and the low nybble has to skip 6 values for A-F.
+            if lo > 0x09 {
+                hi += 0x10;
+                lo += 0x06;
+            }
+
+            self.s = (hi & 0x80) != 0;
+            self.z = ((lo + hi) & 0xff) != 0;
+            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ hi as u8) & 0x80 != 0);
+
+            // 0xA0 to 0xF0 are invalid for the high nybble, so we need to skip 6 values of the
+            // high nybble.
+            if hi > 0x90 {
+                hi += 0x60;
+            }
+
+            debug!("ADC  A:{:02X}, val:{:02X}, C:{:02X}: res:{:02X}",
+                   self.a, val, self.c as u8, (hi & 0xf0) | (lo & 0x0f));
+
+            //self.c = (hi & 0xff00) != 0;
+            self.a = (lo & 0x0f) as u8 | (hi & 0xf0) as u8;
         } else {
             let n = (self.a as u16) + (val as u16) + (self.c as u16);
             let a = (n & 0x00ff) as u8;
@@ -866,7 +882,7 @@ impl CPU6507 {
             //
             // The second condition checks if the result of the addition has a
             // different sign to either of the values we added together.
-            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
+            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a) & 0x80 != 0);
 
             self.a = a;
         }
@@ -1192,20 +1208,29 @@ impl CPU6507 {
 
     fn sbc(&mut self, addr: u16) {
         let val = self.read(addr);
-        let val = ! val;
 
-        // Everything below is exactly the same as the adc function.
         if self.d {
-            let v1 = (self.a / 16) * 10 + (self.a % 16);
-            let v2 = (val / 16) * 10 + (val % 16);
-            let n  = (v1 as u16) + (v2 as u16) + (self.c as u16);
-            let a  = (n & 0x00ff) as u8;
+            // http://www.6502.org/tutorials/decimal_mode.html
+            let mut temp = (self.a as i16) - (val as i16) - (!self.c as i16);
+            let mut lo = ((self.a as i16) & 0x0f) - ((val as i16) & 0x0f) - (!self.c as i16);
 
+            if temp < 0 {
+                temp -= 0x60;
+            }
+
+            if lo < 0 {
+                temp -= 0x06;
+            }
+
+            debug!("SBC  {:02X} - {:02X} - {:02X} = {:04X}", self.a, val, !self.c as u8, temp);
+
+            let a = (temp & 0xff) as u8;
             self.update_sz(a);
-            self.c = (v1 + v2) > 99;
-            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
+            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a) & 0x80 != 0);
+            self.c = temp >= 0;
             self.a = a;
         } else {
+            let val = ! val;
             let n = (self.a as u16) + (val as u16) + (self.c as u16);
             let a = (n & 0x00ff) as u8;
 
@@ -1217,7 +1242,7 @@ impl CPU6507 {
             //
             // The second condition checks if the result of the addition has a
             // different sign to either of the values we added together.
-            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a as u8) & 0x80 != 0);
+            self.v = ((self.a ^ val) & 0x80 == 0) && ((self.a ^ a) & 0x80 != 0);
 
             self.a = a;
         }

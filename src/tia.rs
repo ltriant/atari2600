@@ -48,7 +48,7 @@ const SHB: u8 = 56;
 
 pub struct TIA {
     // HSYNC counter
-    ctr: Rc<RefCell<Counter>>,
+    ctr: Counter,
 
     // Vertical sync
     vsync: bool,
@@ -91,7 +91,7 @@ pub struct TIA {
 impl TIA {
     pub fn new() -> Self {
         let colors = Rc::new(RefCell::new(Colors::new()));
-        let hsync_ctr = Rc::new(RefCell::new(Counter::new(57, 0)));
+        let hsync_ctr = Counter::new(57, 0);
         let pf = Playfield::new(colors.clone());
         let bl = Ball::new(colors.clone());
         let m0 = Missile::new(colors.clone(), PlayerType::Player0);
@@ -221,16 +221,16 @@ impl TIA {
     }
 
     fn visible_cycle(&self) -> bool {
-        self.ctr.borrow().value() > RHB && self.ctr.borrow().value() <= SHB
+        self.ctr.value() > RHB && self.ctr.value() <= SHB
     }
 
     fn in_late_reset(&self) -> bool {
-        self.late_reset_hblank && self.ctr.borrow().value() > RHB && self.ctr.borrow().value() <= LRHB
+        self.late_reset_hblank && self.ctr.value() > RHB && self.ctr.value() <= LRHB
     }
 
     pub fn clock(&mut self) {
         // Clock the horizontal sync counter
-        let clocked = self.ctr.borrow_mut().clock();
+        let clocked = self.ctr.clock();
 
         if self.visible_cycle() {
             // Playfield is clocked on every visible cycle
@@ -261,7 +261,7 @@ impl TIA {
                 color = self.get_pixel_color() as usize
             };
 
-            let x = self.ctr.borrow().internal_value as usize - 68;
+            let x = self.ctr.internal_value as usize - 68;
             self.pixels[x] = NTSC_PALETTE[color];
         } else {
             // During HBLANK we apply extra HMOVE clocks
@@ -273,7 +273,7 @@ impl TIA {
         }
 
         if clocked {
-            match self.ctr.borrow().value() {
+            match self.ctr.value() {
                 // If we've reset the counter back to 0, we've finished the scanline and started
                 // a new scanline, in HBlank.
                 0 => {
@@ -352,7 +352,7 @@ impl Bus for TIA {
                 self.vsync = (val & 0x02) != 0;
 
                 if self.vsync {
-                    self.ctr.borrow_mut().reset();
+                    self.ctr.reset();
                 }
             },
 
@@ -370,7 +370,7 @@ impl Bus for TIA {
             0x0002 => { self.wsync = true },
 
             // RSYNC   <strobe>  reset horizontal sync counter
-            0x0003 => { self.ctr.borrow_mut().reset() },
+            0x0003 => { self.ctr.reset() },
 
             //
             // Colors

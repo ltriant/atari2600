@@ -172,8 +172,8 @@ impl TIA {
                 .or(self.m0.get_color())
                 .or(self.p1.get_color())
                 .or(self.m1.get_color())
-                .or(self.pf.get_color())
                 .or(self.bl.get_color())
+                .or(self.pf.get_color())
                 .unwrap_or(self.colors.borrow().colubk())
         } else {
             // Optionally, the playfield and ball may be assigned to have higher

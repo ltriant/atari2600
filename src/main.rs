@@ -33,23 +33,26 @@ fn main() {
     let rom_path = env::args().skip(1).next()
         .expect("missing argument: rom file");
 
-    let mut fh = File::open(rom_path).expect("unable to open rom");
+    let mut fh = File::open(&rom_path).expect("unable to open rom");
 
     let mut rom = vec![];
     let bytes = fh.read_to_end(&mut rom).expect("unable to read rom data");
-    info!("read {} bytes of ROM data", bytes);
+    info!("ROM: {} ({} bytes)", rom_path, bytes);
 
+    info!("RIOT: init");
     let riot = Rc::new(RefCell::new(RIOT::new()));
     riot.borrow_mut().up(false);
     riot.borrow_mut().down(false);
     riot.borrow_mut().left(false);
     riot.borrow_mut().right(false);
 
+    info!("TIA: init");
     let tia = Rc::new(RefCell::new(TIA::new()));
     tia.borrow_mut().joystick_fire(false);
 
     let bus = AtariBus::new(tia.clone(), riot.clone(), rom);
 
+    info!("CPU: init");
     let mut cpu = CPU6507::new(Box::new(bus));
     cpu.reset();
 
@@ -57,11 +60,14 @@ fn main() {
     // SDL-related stuffs
     //
 
+    info!("Graphics: init");
     let width  = 160 * 5;
     let height = 192 * 3;
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
+
+    info!("  video driver: {}", video_subsystem.current_video_driver());
 
     let window = video_subsystem.window("atari2600", width, height)
         .position_centered()
@@ -72,6 +78,8 @@ fn main() {
         .target_texture()
         .build()
         .unwrap();
+
+    info!("  canvas driver: {}", canvas.info().name);
 
     let texture_creator = canvas.texture_creator();
     let mut texture = texture_creator.create_texture_streaming(PixelFormatEnum::RGB24, width, height)

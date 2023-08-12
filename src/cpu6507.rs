@@ -818,10 +818,7 @@ impl CPU6507 {
                 hi += 0x60;
             }
 
-            debug!("ADC  A:{:02X}, val:{:02X}, C:{:02X}: res:{:02X}",
-                   self.a, val, self.c as u8, (hi & 0xf0) | (lo & 0x0f));
-
-            //self.c = (hi & 0xff00) != 0;
+            self.c = (hi & 0xff00) != 0;
             self.a = (lo & 0x0f) as u8 | (hi & 0xf0) as u8;
         } else {
             let n = (self.a as u16) + (val as u16) + (self.c as u16);

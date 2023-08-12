@@ -507,9 +507,6 @@ pub struct CPU6507 {
     // Stack pointer
     sp: u8,
 
-    // DMA requires CPU cycles, so this is the mechanism we use to achieve that
-    stall: Option<u64>,
-
     // Total number of cycles executed
     cycles: u64,
 
@@ -526,12 +523,8 @@ impl Bus for CPU6507 {
     }
 
     fn write(&mut self, addr: u16, val: u8) {
-        if addr == 0x4014 {
-            self.dma(val);
-        } else {
-            // The 6507 only had 13 address lines connected.
-            self.bus.write(addr & 0x1fff, val);
-        }
+        // The 6507 only had 13 address lines connected.
+        self.bus.write(addr & 0x1fff, val);
     }
 }
 
@@ -557,7 +550,6 @@ impl CPU6507 {
 
             sp: STACK_INIT,
 
-            stall: None,
             cycles: 0,
 
             current_instruction: None,
@@ -581,24 +573,7 @@ impl CPU6507 {
         self.x = 0;
         self.y = 0;
 
-        self.stall = None;
         self.cycles = 0;
-    }
-
-    fn dma(&mut self, val: u8) {
-        let addr_base = (val as u16) << 8;
-
-        for lo_nyb in 0x00 ..= 0xff {
-            let addr = addr_base | lo_nyb;
-            let val = self.read(addr);
-            self.bus.write(0x2004, val);
-        }
-
-        if self.cycles % 2 == 1 {
-            self.stall = Some(514);
-        } else {
-            self.stall = Some(513);
-        }
     }
 
     fn flags(&self) -> u8 {
@@ -798,17 +773,6 @@ impl CPU6507 {
     }
 
     pub fn step(&mut self) -> u64 {
-        // If a DMA was executed before this step, we need to stall a bunch of
-        // cycles before we can do anything else, because DMA costs cycles.
-        if let Some(stall) = self.stall {
-            if stall > 0 {
-                self.stall = Some(stall - 1);
-                return 1;
-            } else {
-                self.stall = None;
-            }
-        }
-
         let start_cycles = self.cycles;
         self.cycles += self.fetch_and_decode();
         self.execute();
@@ -816,17 +780,6 @@ impl CPU6507 {
     }
 
     pub fn clock(&mut self) {
-        // If a DMA was executed before this step, we need to stall a bunch of
-        // cycles before we can do anything else, because DMA costs cycles.
-        if let Some(stall) = self.stall {
-            if stall > 0 {
-                self.stall = Some(stall - 1);
-                return;
-            } else {
-                self.stall = None;
-            }
-        }
-
         if self.current_cycles == 0 {
             self.current_cycles += self.fetch_and_decode();
         }

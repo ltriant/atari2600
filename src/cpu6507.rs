@@ -564,7 +564,7 @@ impl CPU6507 {
         let hi = self.read(0xFFFD) as u16;
         let addr = (hi << 8) | lo;
         self.pc = addr;
-        debug!("PC: 0x{:04X}", self.pc);
+        info!("PC: 0x{:04X}", self.pc);
 
         self.set_flags(0x24);
 

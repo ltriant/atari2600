@@ -62,7 +62,7 @@ fn main() {
 
     info!("Graphics: init");
     let width  = 160 * 5;
-    let height = 192 * 3;
+    let height = 200 * 3;
 
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
@@ -124,7 +124,7 @@ fn main() {
     let mut vblank = 0;
     let mut visible = 0;
 
-    let mut frame_pixels = vec![vec![Color::RGB(0, 0, 0); 160]; 192];
+    let mut frame_pixels = vec![vec![Color::RGB(0, 0, 0); 160]; 200];
 
     'running: loop {
         // Generate one full frame
@@ -212,7 +212,7 @@ fn main() {
         fps_start = Instant::now();
 
         texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
-            for y in 0 .. 192 {
+            for y in 0 .. 200 {
                 for x in 0 .. 160 {
                     let color  = frame_pixels[y][x];
                     let offset = 3*(y*pitch) + 5*(x*3);

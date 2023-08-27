@@ -1,6 +1,6 @@
 # atari2600
 
-An Atari 2600 emulator, because I like stepping back in time to the console wars of the 80s.
+An emulator for the Atari 2600 emulator.
 
 The goal of this is to be able to play a couple of key games that have sentimental value to me, rather than attempting to be a highly accurate emulator that can play the vast library of games available. For that, there's [Stella](https://github.com/stella-emu/stella).
 
@@ -53,3 +53,10 @@ $ target/release/atari2600 roms/Pitfall.a26
 | Down | S |
 | Right | D |
 | Button | N |
+
+# References
+
+These projects helped me understand a lot when the docs weren't clear enough.
+
+* [ruby2600](https://github.com/chesterbr/ruby2600)
+* [Gopher2600](https://github.com/JetSetIlly/Gopher2600)

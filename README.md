@@ -6,6 +6,8 @@ The goal of this is to be able to play a couple of key games that have sentiment
 
 # TODO
 
+This is still in progress. It can play games, but it's still got problems.
+
 1. ~~Docs~~ ([this](https://problemkaputt.de/2k6specs.htm) is great)
 2. ~~6507 CPU~~ (rip out the interrupts from my 6502)
 3. ~~Basic memory map~~ (13-bit address bus, RAM, and cartridge ROM)
@@ -22,6 +24,32 @@ The goal of this is to be able to play a couple of key games that have sentiment
 14. Fix frame timing
 15. ~~RIOT chip (MOS 6532) for peripherals~~
 16. Fix small horizontal position bugs
-17. Audio
+17. Audio (see [this](https://www.biglist.com/lists/stella/archives/200311/msg00156.html))
 18. ..
 19. Adventure time!
+
+# Building and Runnning
+
+```
+$ brew install sdl2
+$ cargo build --release
+$ target/release/atari2600 roms/Pitfall.a26
+```
+
+# Console Buttons
+
+| Console Switch | Keyboard Button |
+| -------------- | --------------- |
+| Select | F1 |
+| Reset | F2 |
+| Color Toggle | F3 |
+
+# Joystick 1 Keys
+
+| Joystick Button | Keyboard Button |
+| --------------- | --------------- |
+| Up | W |
+| Left | A |
+| Down | S |
+| Right | D |
+| Button | N |

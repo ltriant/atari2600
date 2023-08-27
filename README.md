@@ -40,11 +40,11 @@ $ target/release/atari2600 roms/Pitfall.a26
 
 | Console Switch | Keyboard Button |
 | -------------- | --------------- |
-| Select | F1 |
-| Reset | F2 |
+| Game Select | F1 |
+| Game Reset | F2 |
 | Color Toggle | F3 |
 
-# Joystick 1 Keys
+# Joystick 0 Keys
 
 | Joystick Button | Keyboard Button |
 | --------------- | --------------- |
@@ -52,7 +52,7 @@ $ target/release/atari2600 roms/Pitfall.a26
 | Left | A |
 | Down | S |
 | Right | D |
-| Button | N |
+| Fire | N |
 
 # References
 

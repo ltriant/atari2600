@@ -1,6 +1,6 @@
 # atari2600
 
-An emulator for the Atari 2600 emulator.
+An emulator for the Atari 2600.
 
 The goal of this is to be able to play a couple of key games that have sentimental value to me, rather than attempting to be a highly accurate emulator that can play the vast library of games available. For that, there's [Stella](https://github.com/stella-emu/stella).
 

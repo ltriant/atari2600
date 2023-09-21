@@ -3,6 +3,7 @@
 
 mod bus;
 mod cpu6507;
+mod debugger;
 mod riot;
 mod tia;
 
@@ -16,6 +17,7 @@ use std::time::{Duration, Instant};
 
 use crate::bus::AtariBus;
 use crate::cpu6507::CPU6507;
+use crate::debugger::Debugger;
 use crate::riot::RIOT;
 use crate::tia::TIA;
 
@@ -102,6 +104,10 @@ fn main() {
     let mut event_pump = sdl_context.event_pump().unwrap();
     let mut fps_start = Instant::now();
 
+    let mut debugger = Rc::new(RefCell::new(Debugger::new(
+        tia.clone(),
+    )));
+
     let mut scanline = || {
         for c in 0 .. CLOCKS_PER_SCANLINE {
             if (c % 3) == 0 {
@@ -109,6 +115,7 @@ fn main() {
             }
 
             tia.borrow_mut().clock();
+            debugger.borrow_mut().debug();
 
             if !tia.borrow().cpu_halt() && (c % 3) == 2 {
                 cpu.clock();
@@ -123,66 +130,99 @@ fn main() {
     let mut vsync = 0;
     let mut vblank = 0;
     let mut visible = 0;
+    let mut overscan = 0;
 
     let mut frame_pixels = vec![vec![Color::RGB(0, 0, 0); 160]; 200];
 
     'running: loop {
-        // Generate one full frame
+        if debugger.borrow().next_frame() {
+            // Generate one full frame
 
-        // VSync
-        while tia.borrow().in_vsync() {
-            scanline();
-            vsync += 1;
-        }
-
-        // VBlank
-        while tia.borrow().in_vblank() {
-            scanline();
-            vblank += 1;
-        }
-
-        // Picture
-        let mut y = 0;
-        while !tia.borrow().in_vblank() {
-            let pixels = scanline();
-            if y < frame_pixels.len() {
-                frame_pixels[y] = pixels;
+            // VSync
+            while tia.borrow().in_vsync() {
+                scanline();
+                vsync += 1;
             }
-            y += 1;
 
-            visible += 1;
+            // VBlank
+            while tia.borrow().in_vblank() {
+                scanline();
+                vblank += 1;
+            }
+
+            // Picture
+            let mut y = 0;
+            while !tia.borrow().in_vblank() {
+                let pixels = scanline();
+                if y < frame_pixels.len() {
+                    frame_pixels[y] = pixels;
+                }
+                y += 1;
+
+                visible += 1;
+            }
+
+            // Overscan
+            while !tia.borrow().in_vsync() {
+                scanline();
+                overscan += 1;
+            }
+
+            frames += 1;
+
+            vsync = 0;
+            vblank = 0;
+            visible = 0;
+            overscan = 0;
+
+            texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
+                for y in 0 .. 200 {
+                    for x in 0 .. 160 {
+                        let color  = frame_pixels[y][x];
+                        let offset = 3 * (y * pitch) + 5 * (x * 3);
+
+                        for y2 in 0 .. 3 {
+                            let offset = offset + (y2 * pitch);
+
+                            for x2 in 0 .. 5 {
+                                let offset = offset + (x2 * 3);
+
+                                buffer[offset]   = color.r;
+                                buffer[offset+1] = color.g;
+                                buffer[offset+2] = color.b;
+                            }
+                        }
+                    }
+                }
+            }).unwrap();
+
+            canvas.clear();
+            canvas.copy(&texture, None, None).unwrap();
+            canvas.present();
+
+            debugger.borrow_mut().end_frame();
         }
-
-        // Overscan
-        while !tia.borrow().in_vsync() {
-            scanline();
-        }
-
-        frames += 1;
-
-        debug!("line counts: vsync: {}, vblank: {}, visible: {}, scanlines: {}",
-               vsync,
-               vblank,
-               visible,
-               frame_pixels.len());
-        vsync = 0;
-        vblank = 0;
-        visible = 0;
 
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. } => { break 'running },
                 Event::KeyDown { keycode: Some(key), .. } => {
                     match key {
+                        // Joystick controls
                         Keycode::W => riot.borrow_mut().up(true),
                         Keycode::A => riot.borrow_mut().left(true),
                         Keycode::S => riot.borrow_mut().down(true),
                         Keycode::D => riot.borrow_mut().right(true),
                         Keycode::N => tia.borrow_mut().joystick_fire(true),
 
+                        // Console switches
                         Keycode::F1 => riot.borrow_mut().select(true),
                         Keycode::F2 => riot.borrow_mut().reset(true),
                         Keycode::F3 => riot.borrow_mut().color(),
+
+                        // Debugger
+                        Keycode::Backquote => debugger.borrow_mut().toggle(),
+                        Keycode::Space     => debugger.borrow_mut().step_frame(),
 
                         _ => {},
                     }
@@ -210,30 +250,5 @@ fn main() {
         }
 
         fps_start = Instant::now();
-
-        texture.with_lock(None, |buffer: &mut [u8], pitch: usize| {
-            for y in 0 .. 200 {
-                for x in 0 .. 160 {
-                    let color  = frame_pixels[y][x];
-                    let offset = 3*(y*pitch) + 5*(x*3);
-
-                    for y2 in 0 .. 3 {
-                        let offset = offset + (y2 * pitch);
-
-                        for x2 in 0 .. 5 {
-                            let offset = offset + (x2 * 3);
-
-                            buffer[offset]   = color.r;
-                            buffer[offset+1] = color.g;
-                            buffer[offset+2] = color.b;
-                        }
-                    }
-                }
-            }
-        }).unwrap();
-
-        canvas.clear();
-        canvas.copy(&texture, None, None).unwrap();
-        canvas.present();
     }
 }

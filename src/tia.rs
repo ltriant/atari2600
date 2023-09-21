@@ -294,6 +294,13 @@ impl TIA {
             }
         }
     }
+
+    pub fn debug(&self) {
+        //self.p0.debug();
+        //self.p1.debug();
+        //self.m0.debug();
+        self.m1.debug();
+    }
 }
 
 impl Bus for TIA {

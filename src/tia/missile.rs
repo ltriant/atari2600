@@ -144,4 +144,16 @@ impl Missile {
 
         return None;
     }
+
+    pub fn debug(&self) {
+        if !self.should_draw_graphic() && !self.should_draw_copy() {
+            return
+        }
+
+        println!("ctr: {}, nusiz: {:03b}, gv: {:?}",
+                 self.ctr.value(),
+                 self.nusiz,
+                 self.graphic_bit_value,
+        );
+    }
 }

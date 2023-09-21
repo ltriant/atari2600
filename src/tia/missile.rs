@@ -15,7 +15,9 @@ pub struct Missile {
 
     enabled: bool,
     hmove_offset: u8,
-    nusiz: usize,
+    nusiz: u8,
+    size: u8,
+    copies: u8,
     ctr: Counter,
 
     // Graphics Scan Counter
@@ -33,6 +35,8 @@ impl Missile {
             enabled: false,
             hmove_offset: 0,
             nusiz: 0,
+            size: 0,
+            copies: 0,
             ctr: Counter::new(40, 39),
 
             graphic_bit_idx: None,
@@ -43,7 +47,11 @@ impl Missile {
 
     pub fn set_enabled(&mut self, en: bool) { self.enabled = en }
     pub fn set_hmove_value(&mut self, v: u8) { self.hmove_offset = v }
-    pub fn set_nusiz(&mut self, size: usize) { self.nusiz = size }
+    pub fn set_nusiz(&mut self, val: u8) {
+        self.nusiz = val;
+        self.size = 1 << ((val & 0b0011_0000) >> 4);
+        self.copies = val & 0x07;
+    }
     pub fn hmclr(&mut self) { self.hmove_offset = 0 }
     pub fn reset(&mut self) {
         self.ctr.reset();
@@ -59,7 +67,7 @@ impl Missile {
         self.tick_graphic_circuit();
     }
 
-    fn copies(&self) -> usize { self.nusiz }
+    fn size(&self) -> usize { self.size as usize }
     fn pixel_bit(&self) -> bool { self.enabled }
 
     fn tick_graphic_circuit(&mut self) {
@@ -68,7 +76,7 @@ impl Missile {
                 self.graphic_bit_value = Some(self.pixel_bit());
 
                 self.graphic_bit_copies_written += 1;
-                if self.graphic_bit_copies_written == self.copies() {
+                if self.graphic_bit_copies_written == self.size() {
                     self.graphic_bit_copies_written = 0;
                     idx += 1;
                 }
@@ -93,9 +101,9 @@ impl Missile {
     fn should_draw_copy(&self) -> bool {
         let count = self.ctr.value();
 
-           (count == 3  && (self.nusiz == 0b001 || self.nusiz == 0b011))
-        || (count == 7  && (self.nusiz == 0b010 || self.nusiz == 0b011 || self.nusiz == 0b110))
-        || (count == 15 && (self.nusiz == 0b100 || self.nusiz == 0b110))
+           (count == 3  && (self.copies == 0b001 || self.copies == 0b011))
+        || (count == 7  && (self.copies == 0b010 || self.copies == 0b011 || self.copies == 0b110))
+        || (count == 15 && (self.copies == 0b100 || self.copies == 0b110))
     }
 
     pub fn clock(&mut self) {

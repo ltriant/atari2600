@@ -67,7 +67,7 @@ impl Ball {
         self.tick_graphic_circuit();
     }
 
-    fn copies(&self) -> usize { self.nusiz }
+    fn size(&self) -> usize { self.nusiz }
     fn pixel_bit(&self) -> bool {
         if self.vdel {
             self.old_value
@@ -82,7 +82,7 @@ impl Ball {
                 self.graphic_bit_value = Some(self.pixel_bit());
 
                 self.graphic_bit_copies_written += 1;
-                if self.graphic_bit_copies_written == self.copies() {
+                if self.graphic_bit_copies_written == self.size() {
                     self.graphic_bit_copies_written = 0;
                     idx += 1;
                 }

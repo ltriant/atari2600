@@ -20,6 +20,7 @@ use crate::tia::playfield::Playfield;
 
 use sdl2::pixels::Color;
 
+#[derive(Debug)]
 pub enum PlayerType {
     Player0,
     Player1,
@@ -348,13 +349,7 @@ impl Bus for TIA {
             //
 
             // VSYNC   ......1.  vertical sync set-clear
-            0x0000 => {
-                self.vsync = (val & 0x02) != 0;
-
-                if self.vsync {
-                    self.ctr.reset();
-                }
-            },
+            0x0000 => { self.vsync = (val & 0x02) != 0 },
 
             // VBLANK  11....1.  vertical blank set-clear
             0x0001 => {
@@ -413,31 +408,17 @@ impl Bus for TIA {
 
             // NUSIZ0  ..111111  number-size player-missile 0
             0x0004 => {
-                let missile_size = match (val & 0b0011_0000) >> 4 {
-                    0 => 1,
-                    1 => 2,
-                    2 => 4,
-                    3 => 8,
-                    _ => unreachable!(),
-                };
                 let player_copies = val & 0b0000_0111;
 
-                self.m0.set_nusiz(missile_size);
+                self.m0.set_nusiz(val);
                 self.p0.set_nusiz(player_copies);
             },
 
             // NUSIZ1  ..111111  number-size player-missile 1
             0x0005 => {
-                let missile_size = match (val & 0b0011_0000) >> 4 {
-                    0 => 1,
-                    1 => 2,
-                    2 => 4,
-                    3 => 8,
-                    _ => unreachable!(),
-                };
                 let player_copies = val & 0b0000_0111;
 
-                self.m1.set_nusiz(missile_size);
+                self.m1.set_nusiz(val);
                 self.p1.set_nusiz(player_copies);
             },
 

@@ -57,8 +57,8 @@ impl Player {
         }
     }
 
-    pub fn copies(&self) -> usize {
-        match self.nusiz {
+    pub fn size(&self) -> usize {
+        match self.nusiz & 0x0f {
             0b0101 => 2,
             0b0111 => 4,
             _      => 1,
@@ -69,7 +69,7 @@ impl Player {
     pub fn set_hmove_value(&mut self, v: u8) { self.hmove_offset = v }
     pub fn set_graphic(&mut self, graphic: u8) { self.graphic = graphic }
     pub fn set_horizontal_mirror(&mut self, reflect: bool) { self.horizontal_mirror = reflect }
-    pub fn set_nusiz(&mut self, v: u8) { self.nusiz = v }
+    pub fn set_nusiz(&mut self, v: u8) { self.nusiz = v & 0x0f }
     pub fn set_vdel(&mut self, v: bool) { self.vdel = v }
     pub fn set_vdel_value(&mut self) { self.old_value = self.graphic }
     pub fn hmclr(&mut self) { self.hmove_offset = 0 }
@@ -112,7 +112,7 @@ impl Player {
                 self.graphic_bit_value = Some(self.pixel_bit());
 
                 self.graphic_bit_copies_written += 1;
-                if self.graphic_bit_copies_written == self.copies() {
+                if self.graphic_bit_copies_written == self.size() {
                     self.graphic_bit_copies_written = 0;
                     idx += 1;
                 }

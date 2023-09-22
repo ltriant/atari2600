@@ -47,6 +47,8 @@ fn main() {
     riot.borrow_mut().down(false);
     riot.borrow_mut().left(false);
     riot.borrow_mut().right(false);
+    riot.borrow_mut().select(false);
+    riot.borrow_mut().reset(false);
 
     info!("TIA: init");
     let tia = Rc::new(RefCell::new(TIA::new()));

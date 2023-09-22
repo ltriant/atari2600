@@ -1162,7 +1162,7 @@ impl CPU6507 {
         if self.d {
             // http://www.6502.org/tutorials/decimal_mode.html
             let mut temp = (self.a as i16) - (val as i16) - (!self.c as i16);
-            let mut lo = ((self.a as i16) & 0x0f) - ((val as i16) & 0x0f) - (!self.c as i16);
+            let lo = ((self.a as i16) & 0x0f) - ((val as i16) & 0x0f) - (!self.c as i16);
 
             if temp < 0 {
                 temp -= 0x60;

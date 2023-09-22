@@ -1,6 +1,7 @@
 pub struct Counter {
     period: u8,
     reset_value: u8,
+    reset_delay: u8,
     pub internal_value: u8,
 
     last_value: u8,
@@ -24,6 +25,7 @@ impl Counter {
             period: period,
             reset_value: reset_value,
             internal_value: 0,
+            reset_delay: 0,
 
             last_value: 0,
             ticks_added: 0,
@@ -43,7 +45,27 @@ impl Counter {
         self.internal_value = v;
     }
 
+    pub fn reset_to_h1(&mut self) {
+        // From TIA_HW_Notes.txt:
+        //
+        // > RSYNC resets the two-phase clock for the HSync counter to the
+        // > H@1 rising edge when strobed.
+        self.internal_value = self.value() * 4;
+
+        // A full H@1-H@2 cycle after RSYNC is strobed, the
+        // HSync counter is also reset to 000000 and HBlank is turned on.
+        self.reset_delay = 8;
+    }
+
     pub fn clock(&mut self) -> bool {
+        if self.reset_delay > 0 {
+            self.reset_delay -= 1;
+
+            if self.reset_delay == 0 {
+                self.reset();
+            }
+        }
+
         self.internal_value += 1;
         self.internal_value %= self.period * 4;
 

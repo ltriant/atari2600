@@ -372,7 +372,7 @@ impl Bus for TIA {
             0x0002 => { self.wsync = true },
 
             // RSYNC   <strobe>  reset horizontal sync counter
-            0x0003 => { self.ctr.reset() },
+            0x0003 => { self.ctr.reset_to_h1() },
 
             //
             // Colors
